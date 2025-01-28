@@ -13,106 +13,104 @@ const API_BASE_URL = "http://localhost:5000/api";
 const AdminDashboard = ({ onLogout }) => {
   const { isAdmin, logout, socket } = useUserContext();
   const [activeSection, setActiveSection] = useState("dashboard");
-  const [voters, setVoters] = useState([]);
-  const [elections, setElections] = useState([]);
-  const [candidates, setCandidates] = useState([]);
-  const [dashboardStats, setDashboardStats] = useState({
-    totalVoters: 0,
-    activeElections: 0,
-    recentCandidates: [],
-    voterParticipation: 0,
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState({
+    voters: [],
+    elections: [],
+    candidates: [],
+    stats: {
+      totalVoters: 0,
+      activeElections: 0,
+      recentCandidates: [],
+      voterParticipation: 0,
+      totalVotes: 0,
+    },
   });
 
-  const fetchData = useCallback(async (endpoint) => {
+  const fetchDashboardData = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/${endpoint}`);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching ${endpoint}:`, error);
-      return [];
-    }
-  }, []);
-
-  const calculateVoterParticipation = useCallback((voters) => {
-    const votedVoters = voters.filter((voter) => voter.hasVoted).length;
-    return voters.length > 0 ? (votedVoters / voters.length) * 100 : 0;
-  }, []);
-
-  const fetchDashboardStats = useCallback(async () => {
-    try {
-      const [votersData, electionsData, candidatesData] = await Promise.all([
-        fetchData("voters"),
-        fetchData("elections"),
-        fetchData("candidates"),
+      const [voters, elections, candidates] = await Promise.all([
+        axios.get(`${API_BASE_URL}/voters`, {
+          withCredentials: true,
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }),
+        axios.get(`${API_BASE_URL}/elections`, {
+          withCredentials: true,
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }),
+        axios.get(`${API_BASE_URL}/candidates`, {
+          withCredentials: true,
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }),
       ]);
-
-      const activeElections = electionsData.filter(
+      console.log("All candidates data:", candidates.data);
+      console.log("First candidate example:", candidates.data[0]);
+      console.log("Recent candidates being set:", candidates.data.slice(0, 5));
+      const activeElections = elections.data.filter(
         (election) => new Date(election.endDate) > new Date()
-      ).length;
+      );
 
-      setDashboardStats({
-        totalVoters: votersData.length,
-        activeElections,
-        recentCandidates: candidatesData.slice(0, 5),
-        voterParticipation: calculateVoterParticipation(votersData),
+      setDashboardData({
+        voters: voters.data,
+        elections: elections.data,
+        candidates: candidates.data,
+        stats: {
+          totalVoters: voters.data.length,
+          activeElections: activeElections.length,
+          recentCandidates: candidates.data.slice(0, 5),
+          voterParticipation: calculateParticipation(voters.data),
+          totalVotes: calculateTotalVotes(elections.data),
+        },
       });
     } catch (error) {
-      console.error("Error updating dashboard stats:", error);
+      console.error("Error fetching dashboard data:", error);
+      if (error.response?.status === 401) {
+        logout();
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [fetchData, calculateVoterParticipation]);
+  }, [logout]);
+
+  const calculateParticipation = (voters) => {
+    const votedVoters = voters.filter((voter) => voter.hasVoted).length;
+    return voters.length > 0 ? (votedVoters / voters.length) * 100 : 0;
+  };
+
+  const calculateTotalVotes = (elections) => {
+    return elections.reduce(
+      (total, election) => total + (election.totalVotes || 0),
+      0
+    );
+  };
 
   useEffect(() => {
     if (!isAdmin) {
       logout();
       return;
     }
-    const initializeDashboard = async () => {
-      try {
-        await fetchDashboardStats();
-        const [votersData, electionsData, candidatesData] = await Promise.all([
-          fetchData("voters"),
-          fetchData("elections"),
-          fetchData("candidates"),
-        ]);
-        setVoters(votersData);
-        setElections(electionsData);
-        setCandidates(candidatesData);
-      } catch (error) {
-        console.error("Error initializing dashboard:", error);
-        if (error.response?.status === 401) {
-          logout();
-        }
-      }
-    };
 
-    initializeDashboard();
+    fetchDashboardData();
 
-    socket?.on("voter_registered", async (newVoter) => {
-      setVoters((prev) => [...prev, newVoter]);
-      await fetchDashboardStats();
+    socket?.on("voter_registered", () => {
+      fetchDashboardData();
+    });
+
+    socket?.on("vote_cast", () => {
+      fetchDashboardData();
     });
 
     return () => {
       socket?.off("voter_registered");
+      socket?.off("vote_cast");
     };
-  }, [isAdmin, logout, socket, fetchData, fetchDashboardStats]);
-
-  if (!isAdmin) {
-    return (
-      <div className="auth-error">
-        <h3>Access Denied</h3>
-        <p>You must be logged in as an administrator to view this content.</p>
-      </div>
-    );
-  }
+  }, [isAdmin, logout, fetchDashboardData, socket]);
 
   const chartOptions = {
     chart: {
       type: "line",
       height: 350,
-      toolbar: {
-        show: true,
-      },
+      toolbar: { show: true },
       animations: {
         enabled: true,
         easing: "easeinout",
@@ -122,39 +120,59 @@ const AdminDashboard = ({ onLogout }) => {
     title: {
       text: "Election Analytics",
       align: "center",
-      style: {
-        fontSize: "20px",
-        fontWeight: "bold",
-      },
+      style: { fontSize: "20px", fontWeight: "bold" },
     },
     xaxis: {
-      categories: elections.map((election) => election.name) || [],
-      labels: {
-        style: {
-          fontSize: "12px",
-        },
-      },
+      categories: dashboardData.elections.map((election) => election.name),
+      labels: { style: { fontSize: "12px" } },
     },
     series: [
       {
         name: "Voter Turnout",
-        data: elections.map((election) => election.turnout || 0),
+        data: dashboardData.elections.map((election) => election.turnout || 0),
       },
     ],
-    stroke: {
-      curve: "smooth",
-      width: 3,
-    },
-    markers: {
-      size: 6,
-      hover: {
-        size: 8,
-      },
-    },
+    stroke: { curve: "smooth", width: 3 },
+    markers: { size: 6, hover: { size: 8 } },
+    // Add this inside the chart options
     theme: {
       mode: "light",
+      palette: "palette1",
+      monochrome: {
+        enabled: false,
+        color: "#3498db",
+        shadeTo: "light",
+        shadeIntensity: 0.65,
+      },
+    },
+    tooltip: {
+      theme: "light",
+      x: {
+        show: true,
+      },
+      y: {
+        title: {
+          formatter: (value) => `${value}:`,
+        },
+      },
+    },
+    grid: {
+      borderColor: "#f1f1f1",
+      row: {
+        colors: ["transparent", "transparent"],
+        opacity: 0.5,
+      },
     },
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="auth-error">
+        <h3>Access Denied</h3>
+        <p>Administrator access required.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-dashboard">
@@ -165,94 +183,103 @@ const AdminDashboard = ({ onLogout }) => {
         </button>
       </header>
 
-      <aside className="admin-sidebar">
-        <nav>
-          <ul>
-            {["dashboard", "elections", "candidates", "voters", "results"].map(
-              (section) => (
-                <li
-                  key={section}
-                  onClick={() => setActiveSection(section)}
-                  className={activeSection === section ? "active" : ""}
-                >
-                  {section.charAt(0).toUpperCase() + section.slice(1)}
-                </li>
-              )
-            )}
-          </ul>
-        </nav>
-      </aside>
-
-      <main className="admin-content">
-        {activeSection === "dashboard" && (
-          <div className="dashboard-overview">
-            <h2>Dashboard Overview</h2>
-            <div className="stats-cards">
-              <div className="stats-card">
-                <h3>Total Voters</h3>
-                <p>{dashboardStats.totalVoters}</p>
-              </div>
-              <div className="stats-card">
-                <h3>Active Elections</h3>
-                <p>{dashboardStats.activeElections}</p>
-              </div>
-              <div className="stats-card">
-                <h3>Recent Candidates</h3>
-                <ul>
-                  {dashboardStats.recentCandidates.map((candidate) => (
-                    <li key={candidate.id}>
-                      {candidate.name} ({candidate.party})
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="election-status">
-              <h3>Election Statuses</h3>
+      {loading ? (
+        <div className="loading-container">
+          <div className="loader"></div>
+          <p>Loading dashboard data...</p>
+        </div>
+      ) : (
+        <>
+          <aside className="admin-sidebar">
+            <nav>
               <ul>
-                {elections.map((election) => (
+                {[
+                  "dashboard",
+                  "elections",
+                  "candidates",
+                  "voters",
+                  "results",
+                ].map((section) => (
                   <li
-                    key={election.id}
-                    className={
-                      election.isActive
-                        ? "active-election"
-                        : "completed-election"
-                    }
+                    key={section}
+                    onClick={() => setActiveSection(section)}
+                    className={activeSection === section ? "active" : ""}
                   >
-                    {election.name} -{" "}
-                    {election.isActive ? "Ongoing" : "Completed"}
+                    {section.charAt(0).toUpperCase() + section.slice(1)}
                   </li>
                 ))}
               </ul>
-            </div>
+            </nav>
+          </aside>
 
-            <div className="voter-statistics">
-              <h3>Voter Statistics</h3>
-              <p>Total Registered Voters: {dashboardStats.totalVoters}</p>
-              <p>
-                Voter Participation:{" "}
-                {dashboardStats.voterParticipation.toFixed(2)}%
-              </p>
-            </div>
+          <main className="admin-content">
+            {activeSection === "dashboard" && (
+              <div className="dashboard-overview">
+                <div className="stats-cards">
+                  <div className="stat-card">
+                    <h3>Total Voters</h3>
+                    <p>{dashboardData.stats.totalVoters}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Active Elections</h3>
+                    <p>{dashboardData.stats.activeElections}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Total Votes Cast</h3>
+                    <p>{dashboardData.stats.totalVotes}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>Voter Participation</h3>
+                    <p>{dashboardData.stats.voterParticipation.toFixed(1)}%</p>
+                  </div>
+                </div>
 
-            <div className="performance-metrics">
-              <h3>Election Analytics</h3>
-              <Chart
-                options={chartOptions}
-                series={chartOptions.series}
-                type="line"
-                height={350}
-              />
-            </div>
-          </div>
-        )}
+                <div className="data-section">
+                  <Chart
+                    options={chartOptions}
+                    series={chartOptions.series}
+                    type="line"
+                    height={350}
+                  />
+                </div>
 
-        {activeSection === "elections" && <Election />}
-        {activeSection === "candidates" && <Candidate />}
-        {activeSection === "voters" && <Voters voters={voters} />}
-        {activeSection === "results" && <Results />}
-      </main>
+                <div className="recent-activity">
+                  <h3>Recent Candidates</h3>
+                  <div className="data-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Party</th>
+                          <th>Election</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dashboardData.stats.recentCandidates.map(
+                          (candidate) => (
+                            <tr key={candidate.candidateid}>
+                              <td>{candidate.name}</td>
+                              <td>{candidate.party}</td>
+                              <td>{candidate.election}</td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeSection === "elections" && <Election />}
+            {activeSection === "candidates" && <Candidate />}
+            {activeSection === "voters" && (
+              <Voters voters={dashboardData.voters} />
+            )}
+            {activeSection === "results" && <Results />}
+          </main>
+        </>
+      )}
     </div>
   );
 };

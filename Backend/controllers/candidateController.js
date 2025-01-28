@@ -1,21 +1,16 @@
-// candidateController.js
 import path from "path";
 import multer from "multer";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { pool } from "../dbConfig.js"; // Ensure proper initialization of pool
+import { pool } from "../dbConfig.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Ensure upload directory exists
 const uploadDir = path.join(__dirname, "../uploads");
-try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-} catch (error) {
-  console.error("Error creating upload directory:", error.message);
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 // Multer configuration for file uploads
@@ -28,36 +23,25 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({
-  storage: storage,
+  storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max size
   fileFilter: (req, file, cb) => {
     const fileExtension = path.extname(file.originalname).toLowerCase();
     if ([".jpg", ".jpeg", ".png"].includes(fileExtension)) {
-      return cb(null, true);
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files (JPG, JPEG, PNG) are allowed!"));
     }
-    cb(new Error("Only image files are allowed!"));
   },
 });
 
-export const uploadCandidatePicture = upload.single("candidatePicture");
+export const uploadCandidatePicture = upload.single("picture");
 
 // Fetch all candidates
 export const getCandidates = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM candidates");
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Fetch candidates by election
-export const fetchCandidatesByElection = async (req, res) => {
-  const { electionId } = req.params;
-  try {
     const result = await pool.query(
-      "SELECT * FROM candidates WHERE electionid = $1",
-      [electionId]
+      "SELECT c.*, e.title AS election FROM candidates c INNER JOIN elections e ON c.electionid = e.electionid"
     );
     res.json(result.rows);
   } catch (err) {
@@ -68,21 +52,18 @@ export const fetchCandidatesByElection = async (req, res) => {
 // Add candidate
 export const addCandidate = async (req, res) => {
   const picture = req.file;
+  const { electionId, name, party } = req.body;
 
   if (!picture) {
-    return res.status(400).json({ error: "Candidate picture is required" });
+    return res.status(400).json({ error: "Candidate picture is required." });
   }
-
-  const { electionId, name, party } = req.body;
 
   if (!electionId || !name || !party) {
     return res.status(400).json({ error: "All fields are required." });
   }
 
   try {
-    const imageUrl = path
-      .relative(process.cwd(), picture.path)
-      .replace(/\\/g, "/");
+    const imageUrl = `/uploads/${picture.filename}`; // Relative path for frontend
     await pool.query(
       "INSERT INTO candidates (electionid, name, party, image_url) VALUES ($1, $2, $3, $4)",
       [electionId, name, party, imageUrl]
@@ -99,83 +80,48 @@ export const addCandidate = async (req, res) => {
   }
 };
 
-// Record vote
-export const recordVote = async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const { candidateId, electionId, voterId } = req.body;
-
-    // Check if election is active
-    const electionStatus = await client.query(
-      "SELECT * FROM elections WHERE electionid = $1 AND NOW() BETWEEN start_date AND end_date",
-      [electionId]
-    );
-
-    if (electionStatus.rows.length === 0) {
-      throw new Error("Election is not active");
-    }
-
-    // Check if voter has already voted in this election
-    const voteCheck = await client.query(
-      "SELECT * FROM votes WHERE voter_id = $1 AND election_id = $2",
-      [voterId, electionId]
-    );
-
-    if (voteCheck.rows.length > 0) {
-      throw new Error("Already voted in this election");
-    }
-
-    // Record the vote
-    const result = await client.query(
-      `INSERT INTO votes (candidateid, electionid, voterid, timestamp)
-       VALUES ($1, $2, $3, NOW()) RETURNING id`,
-      [candidateId, electionId, voterId]
-    );
-
-    // Update candidate vote count
-    await client.query(
-      `UPDATE votecounts 
-       SET vote_count = vote_count + 1 
-       WHERE candidateid = $1`,
-      [candidateId]
-    );
-
-    await client.query("COMMIT");
-
-    res.status(201).json({
-      success: true,
-      message: "Vote recorded successfully",
-      data: result.rows[0],
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    res.status(500).json({ error: error.message });
-  } finally {
-    client.release();
-  }
-};
-// Delete a candidate by ID
+// Delete a candidate
 export const deleteCandidate = async (req, res) => {
   const { candidateId } = req.params;
 
   try {
     const result = await pool.query(
-      "DELETE FROM candidates WHERE id = $1 RETURNING *",
+      "DELETE FROM candidates WHERE candidateid = $1 RETURNING *",
       [candidateId]
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Candidate not found" });
+      return res.status(404).json({ error: "Candidate not found." });
     }
 
-    res.status(200).json({ message: "Candidate deleted successfully" });
+    // Delete candidate image from the server
+    const candidate = result.rows[0];
+    const filePath = path.join(process.cwd(), candidate.image_url);
+    if (fs.existsSync(filePath)) {
+      fs.unlink(filePath, (err) => {
+        if (err) console.error("Error deleting file:", err);
+      });
+    }
+
+    res.status(200).json({ message: "Candidate deleted successfully." });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
+// Fetch candidates by election
+export const fetchCandidatesByElection = async (req, res) => {
+  const { electionId } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT * FROM candidates WHERE electionid = $1",
+      [electionId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+// Update candidate details
 export const updateCandidate = async (req, res) => {
   const { candidateId } = req.params;
   const { name, party } = req.body;
@@ -188,7 +134,7 @@ export const updateCandidate = async (req, res) => {
 
   try {
     const result = await pool.query(
-      "UPDATE candidates SET name = $1, party = $2 WHERE id = $3 RETURNING *",
+      "UPDATE candidates SET name = $1, party = $2 WHERE candidateid = $3 RETURNING *",
       [name, party, candidateId]
     );
 

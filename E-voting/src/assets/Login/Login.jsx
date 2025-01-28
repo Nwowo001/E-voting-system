@@ -134,11 +134,11 @@ const Login = () => {
           <p>
             {isLogin ? (
               <span className="toggle-link" onClick={() => setIsLogin(false)}>
-                Sign Up
+                Don't have an account? Sign Up
               </span>
             ) : (
               <span className="toggle-link" onClick={() => setIsLogin(true)}>
-                Login
+                Already have an acount? Login
               </span>
             )}
           </p>

@@ -58,7 +58,7 @@ const Voters = () => {
           </div>
 
           {voters.length > 0 ? (
-            <table className="voter-table">
+            <table className="voter-table" border={3}>
               <thead>
                 <tr>
                   <th>Name</th>

@@ -10,80 +10,148 @@ const Election = () => {
   const [newElection, setNewElection] = useState({
     title: "",
     description: "",
-    startDate: "",
-    endDate: "",
-    startTime: "",
-    endTime: "",
+    start_date: "",
+    end_date: "",
+    start_time: "",
+    end_time: "",
   });
-  const [canVote, setCanVote] = useState(false);
-  const [electionResults, setElectionResults] = useState(null);
+  const [editElectionId, setEditElectionId] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchElections();
   }, []);
 
+  // Fetch all elections
   const fetchElections = async () => {
     try {
       const response = await axios.get(`${API_URL}/elections`);
-      setElections(response.data);
+      setElections(
+        response.data.map((election) => ({
+          ...election,
+          start_date: election.start_date.slice(0, 10), // Format date to yyyy-MM-dd
+          end_date: election.end_date.slice(0, 10), // Format date to yyyy-MM-dd
+        }))
+      );
     } catch (error) {
       console.error("Error fetching elections:", error.message);
     }
   };
 
-  const handleCreateElection = async () => {
+  // Create or update an election
+  const handleCreateOrUpdateElection = async () => {
+    const { title, description, start_date, end_date, start_time, end_time } =
+      newElection;
+
+    if (
+      !title ||
+      !description ||
+      !start_date ||
+      !end_date ||
+      !start_time ||
+      !end_time
+    ) {
+      alert("All fields are required.");
+      return;
+    }
+
     try {
-      console.log("Creating election with data:", newElection); // Debugging payload
-      const response = await axios.post(`${API_URL}/elections`, newElection);
-      console.log("Election created successfully:", response.data); // Success log
+      setLoading(true);
+      if (editElectionId) {
+        // Update existing election
+        await axios.put(`${API_URL}/elections/${editElectionId}`, newElection);
+        console.log("Election updated successfully.");
+      } else {
+        // Create new election
+        await axios.post(`${API_URL}/elections`, newElection);
+        console.log("Election created successfully.");
+      }
       fetchElections();
-      setNewElection({
-        title: "",
-        description: "",
-        startDate: "",
-        endDate: "",
-        startTime: "",
-        endTime: "",
-      });
+      resetForm();
     } catch (error) {
       console.error(
-        "Error creating election:",
+        "Error creating/updating election:",
         error.response?.data || error.message
-      ); // Log backend error
-    }
-  };
-
-  const fetchElectionResults = async (electionId) => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/elections/${electionId}/results`
       );
-      setElectionResults(response.data);
-    } catch (error) {
-      console.error("Error fetching election results:", error.message);
+      alert(
+        error.response?.data?.error ||
+          "An error occurred while creating/updating the election."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
-  const formatDateTime = (date, time) => {
-    try {
-      const dateObj = new Date(`${date}T${time}`);
-      const options = {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      };
-      return dateObj.toLocaleString(undefined, options);
-    } catch (error) {
-      console.error("Error formatting date/time:", error.message);
-      return "Invalid date/time";
+  // Delete an election
+  const handleDeleteElection = async (electionId) => {
+    if (!window.confirm("Are you sure you want to delete this election?")) {
+      return;
     }
+
+    try {
+      await axios.delete(`${API_URL}/elections/${electionId}`);
+      console.log("Election deleted successfully.");
+      fetchElections();
+    } catch (error) {
+      console.error("Error deleting election:", error.message);
+      alert("Failed to delete the election. Try again.");
+    }
+  };
+
+  // Toggle active/inactive status
+  const handleToggleStatus = async (electionId, isActive) => {
+    try {
+      await axios.put(`${API_URL}/elections/${electionId}/status`, {
+        isActive: !isActive,
+      });
+
+      // Immediately update the local state
+      setElections(
+        elections.map((election) =>
+          election.electionid === electionId
+            ? { ...election, isActive: !isActive }
+            : election
+        )
+      );
+    } catch (error) {
+      console.error("Error toggling election status:", error.message);
+      alert("Failed to update election status. Try again.");
+    }
+  };
+
+  // Reset the form
+  const resetForm = () => {
+    setNewElection({
+      title: "",
+      description: "",
+      start_date: "",
+      end_date: "",
+      start_time: "",
+      end_time: "",
+    });
+    setEditElectionId(null);
+  };
+
+  // Edit an election
+  const handleEditElection = (election) => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    setNewElection({
+      title: election.title,
+      description: election.description,
+      start_date: election.start_date,
+      end_date: election.end_date,
+      start_time: election.start_time || "",
+      end_time: election.end_time || "",
+    });
+    setEditElectionId(election.electionid);
   };
 
   return (
     <div>
       <h2>Manage Elections</h2>
+
+      {/* Create/Update Election Form */}
       <div className="form-group">
         <input
           type="text"
@@ -104,33 +172,33 @@ const Election = () => {
         <input
           type="date"
           placeholder="Start Date"
-          value={newElection.startDate}
+          value={newElection.start_date}
           onChange={(e) =>
-            setNewElection({ ...newElection, startDate: e.target.value })
+            setNewElection({ ...newElection, start_date: e.target.value })
           }
         />
         <input
           type="time"
           placeholder="Start Time"
-          value={newElection.startTime}
+          value={newElection.start_time}
           onChange={(e) =>
-            setNewElection({ ...newElection, startTime: e.target.value })
+            setNewElection({ ...newElection, start_time: e.target.value })
           }
         />
         <input
           type="date"
           placeholder="End Date"
-          value={newElection.endDate}
+          value={newElection.end_date}
           onChange={(e) =>
-            setNewElection({ ...newElection, endDate: e.target.value })
+            setNewElection({ ...newElection, end_date: e.target.value })
           }
         />
         <input
           type="time"
           placeholder="End Time"
-          value={newElection.endTime}
+          value={newElection.end_time}
           onChange={(e) =>
-            setNewElection({ ...newElection, endTime: e.target.value })
+            setNewElection({ ...newElection, end_time: e.target.value })
           }
         />
         <ButtonComponent
@@ -139,44 +207,86 @@ const Election = () => {
           fontSize="1rem"
           padding="10px 20px"
           borderRadius="5px"
-          onClick={handleCreateElection}
+          onClick={handleCreateOrUpdateElection}
         >
-          Create Election
+          {loading
+            ? "Processing..."
+            : editElectionId
+            ? "Update Election"
+            : "Create Election"}
         </ButtonComponent>
+        {editElectionId && (
+          <ButtonComponent
+            backgroundColor="#6c757d"
+            color="white"
+            fontSize="1rem"
+            padding="10px 20px"
+            borderRadius="5px"
+            onClick={resetForm}
+          >
+            Cancel
+          </ButtonComponent>
+        )}
       </div>
 
-      <ul>
-        {elections.map((election) => (
-          <li key={election.electionid}>
-            <h3>{election.title}</h3>
-            <p>
-              {formatDateTime(election.start_date, election.start_time)} to{" "}
-              {formatDateTime(election.end_date, election.end_time)}
-            </p>
-            <ButtonComponent
-              backgroundColor="#17a2b8"
-              color="white"
-              fontSize="1rem"
-              padding="10px 20px"
-              borderRadius="5px"
-              onClick={() => fetchElectionResults(election.electionid)}
-            >
-              View Results
-            </ButtonComponent>
-            {electionResults &&
-              electionResults.electionId === election.electionid && (
-                <div>
-                  <h4>Results:</h4>
-                  {electionResults.candidates.map((candidate) => (
-                    <p key={candidate.id}>
-                      {candidate.name}: {candidate.votes} votes
-                    </p>
-                  ))}
-                </div>
-              )}
-          </li>
-        ))}
-      </ul>
+      {/* Display Elections in Table */}
+      <table className="elections-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {elections.map((election) => (
+            <tr key={election.electionid}>
+              <td>{election.title}</td>
+              <td>{election.description}</td>
+              <td>{election.start_date}</td>
+              <td>{election.end_date}</td>
+              <td>{election.isActive ? "Active" : "Inactive"}</td>
+              <td>
+                <ButtonComponent
+                  backgroundColor="#17a2b8"
+                  color="white"
+                  fontSize="0.9rem"
+                  padding="5px 10px"
+                  borderRadius="5px"
+                  onClick={() => handleEditElection(election)}
+                >
+                  Edit
+                </ButtonComponent>
+                <ButtonComponent
+                  backgroundColor="#dc3545"
+                  color="white"
+                  fontSize="0.9rem"
+                  padding="5px 10px"
+                  borderRadius="5px"
+                  onClick={() => handleDeleteElection(election.electionid)}
+                >
+                  Delete
+                </ButtonComponent>
+                <ButtonComponent
+                  backgroundColor={election.isActive ? "#ffc107" : "#28a745"}
+                  color="white"
+                  fontSize="0.9rem"
+                  padding="5px 10px"
+                  borderRadius="5px"
+                  onClick={() =>
+                    handleToggleStatus(election.electionid, election.isActive)
+                  }
+                >
+                  {election.isActive ? "Deactivate" : "Activate"}
+                </ButtonComponent>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };

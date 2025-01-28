@@ -5,15 +5,15 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import NavbarMain from "./assets/Login/NavbarMain";
 import Login from "./assets/Login/Login";
 import UserDashboard from "./assets/Pages/userDashboard";
 import AdminDashboard from "./assets/Pages/adminDashboard";
 import { useUserContext } from "./Context/UserContext";
+import ElectionCandidates from "./assets/Components/ElectionCandidates/ElectionCandidates";
 import { UserProvider } from "./Context/UserContext";
+
 const AppContent = () => {
   const { user, setUser } = useUserContext();
-
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +47,6 @@ const AppContent = () => {
 
   return (
     <Router>
-      {isLoggedIn && <NavbarMain onLogout={handleLogout} />}
       <Routes>
         <Route
           path="/"
@@ -81,10 +80,12 @@ const AppContent = () => {
             )
           }
         />
+        <Route path="/vote/:electionId" element={<ElectionCandidates />} />
       </Routes>
     </Router>
   );
 };
+
 const App = () => {
   return (
     <UserProvider>

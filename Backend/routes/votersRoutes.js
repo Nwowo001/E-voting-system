@@ -1,6 +1,12 @@
 import express from "express";
 import { pool } from "../dbConfig.js";
 import { authenticateToken, adminOnly } from "../middlewares/authMiddleware.js";
+import {
+  recordVote,
+  getVotes,
+  getUserVotes,
+  castVote,
+} from "../controllers/votesController.js";
 
 const router = express.Router();
 
@@ -36,6 +42,8 @@ router.put("/:id/verify", authenticateToken, adminOnly, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// Get vote counts
 router.get("/counts", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM votecounts");
@@ -44,4 +52,35 @@ router.get("/counts", authenticateToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Cast vote
+router.post("/vote", authenticateToken, recordVote);
+
+// Get all votes
+router.get("/votes", authenticateToken, getVotes);
+
+// Get user-specific votes
+router.get("/votes/user/:userId", authenticateToken, getUserVotes);
+
+// Simplified vote cast endpoint
+router.post("/votes", authenticateToken, recordVote); // Unified endpoint for recording votes
+router.get("/votes", authenticateToken, getVotes);
+router.get("/votes/user/:userId", authenticateToken, getUserVotes);
+router.get("/votes/user", authenticateToken, async (req, res) => {
+  try {
+    const voterId = req.user.id; // Use the ID from the authenticated user
+    const result = await pool.query("SELECT * FROM votes WHERE voterid = $1", [
+      voterId,
+    ]);
+
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Error fetching user votes:", error.message);
+    res.status(500).json({ error: "Failed to fetch user votes" });
+  }
+});
+
+// Now we can pass io dynamically, for example:
+router.post("/votes", (req, res) => recordVote(req, res, req.io)); // Use req.io instead of importing io directly
+
 export default router;

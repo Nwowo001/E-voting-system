@@ -5,6 +5,8 @@ const Results = () => {
   const [elections, setElections] = useState([]);
   const [selectedElection, setSelectedElection] = useState("");
   const [results, setResults] = useState([]);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchElections();
@@ -15,50 +17,106 @@ const Results = () => {
       const response = await fetch("http://localhost:5000/api/elections");
       const data = await response.json();
       setElections(data);
+      setLoading(false);
     } catch (error) {
-      console.error("Error fetching elections:", error);
+      setError("Failed to fetch elections");
+      setLoading(false);
     }
   };
 
   const fetchResults = async (electionId) => {
     try {
+      setLoading(true);
       const response = await fetch(
         `http://localhost:5000/api/elections/results/${electionId}`
       );
       const data = await response.json();
-      setResults(data);
+
+      const totalVotes = data.reduce(
+        (sum, result) => sum + result.voteCount,
+        0
+      );
+      const resultsWithPercentage = data.map((result) => ({
+        ...result,
+        percentage: ((result.voteCount / totalVotes) * 100).toFixed(1),
+      }));
+
+      setResults(resultsWithPercentage);
+      setError(null);
     } catch (error) {
-      console.error("Error fetching results:", error);
+      setError("Failed to fetch results");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleElectionChange = (e) => {
     const electionId = e.target.value;
     setSelectedElection(electionId);
-    fetchResults(electionId);
+    if (electionId) {
+      fetchResults(electionId);
+    } else {
+      setResults([]);
+    }
   };
 
   return (
-    <div className="results">
-      <h2>Election Results</h2>
-      <select onChange={handleElectionChange} value={selectedElection}>
+    <div className="results-container">
+      <div className="results-header">
+        <h2>Election Results</h2>
+      </div>
+
+      <select
+        className="election-selector"
+        onChange={handleElectionChange}
+        value={selectedElection}
+      >
         <option value="">Select an Election</option>
         {elections.map((election) => (
-          <option key={election.id || election.title} value={election.id}>
+          <option key={election.electionid} value={election.electionid}>
             {election.title}
           </option>
         ))}
       </select>
 
-      <ul className="results-list">
+      {loading && (
+        <div className="loading-container">
+          <div className="loader"></div>
+          <p>Loading results...</p>
+        </div>
+      )}
+
+      {error && <div className="error-message">{error}</div>}
+
+      <div className="results-grid">
         {results.map((result) => (
-          <li key={result.candidateId || result.name}>
-            {" "}
-            {/* Fallback to name if candidateId is missing */}
-            {result.name} ({result.party}) - Votes: {result.voteCount}
-          </li>
+          <div key={result.candidateId} className="result-card">
+            <div className="candidate-info">
+              <img
+                src={`http://localhost:5000${result.image_url}`}
+                alt={result.name}
+                className="candidate-image"
+              />
+              <div className="candidate-details">
+                <h3>{result.name}</h3>
+                <p className="party-name">{result.party}</p>
+              </div>
+            </div>
+
+            <div className="vote-count">{result.voteCount} votes</div>
+
+            <div className="vote-percentage">
+              <div className="percentage-bar">
+                <div
+                  className="percentage-fill"
+                  style={{ width: `${result.percentage}%` }}
+                ></div>
+              </div>
+              <span className="percentage-number">{result.percentage}%</span>
+            </div>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 };

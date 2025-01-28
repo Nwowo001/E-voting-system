@@ -19,6 +19,7 @@ import jwt from "jsonwebtoken";
 // };
 export const authenticateToken = (req, res, next) => {
   const token = req.cookies["authToken"];
+  console.log("Auth token from cookie:", token); // Debugging log
 
   if (!token) {
     return res.status(401).json({ message: "Authentication required" });
