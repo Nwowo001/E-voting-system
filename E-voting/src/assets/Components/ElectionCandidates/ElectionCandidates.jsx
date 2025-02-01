@@ -26,14 +26,23 @@ const ElectionCandidates = () => {
   useEffect(() => {
     fetchUserSession();
     fetchCandidates();
-
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      setError("Connection error. Please try again.");
+    });
     socket.on("vote_recorded", (data) => {
       console.log("Vote recorded:", data);
     });
-
-    return () => socket.off("vote_recorded");
+    socket.on("vote_error", (error) => {
+      console.error("Vote error:", error);
+      setError(error);
+    });
+    return () => {
+      socket.off("vote_recorded");
+      socket.off("connect_error");
+      socket.off("vote_error");
+    };
   }, []);
-
   const fetchUserSession = async () => {
     try {
       const response = await axios.get(`${API_URL}/auth/me`, {
@@ -86,40 +95,70 @@ const ElectionCandidates = () => {
     }
   };
 
+  // Update the return section with this enhanced layout
   return (
     <div className="election-candidates-container">
-      <h2>Select Your Candidate</h2>
-
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loader"></div>
-          <p>Loading candidates...</p>
-        </div>
-      )}
+      <div className="election-header">
+        <h2>Select Your Candidate</h2>
+        {loading && (
+          <div className="loading-overlay">
+            <div className="loader"></div>
+            <p>Loading candidates...</p>
+          </div>
+        )}
+      </div>
 
       <div className="candidates-grid">
         {candidates.map((candidate) => (
-          <div key={candidate.candidateid} className="candidate-card">
-            <img
-              src={`http://localhost:5000${candidate.image_url}`}
-              alt={candidate.name}
-              className="candidate-image"
-            />
-            <h3 className="candidate-name">{candidate.name}</h3>
-            <p className="candidate-party">{candidate.party}</p>
-            <button
-              className={`select-button ${
-                selectedCandidate === candidate.candidateid ? "selected" : ""
-              }`}
-              onClick={() => setSelectedCandidate(candidate.candidateid)}
-              disabled={
-                selectedCandidate && selectedCandidate !== candidate.candidateid
-              }
-            >
-              {selectedCandidate === candidate.candidateid
-                ? "Selected"
-                : "Select"}
-            </button>
+          <div
+            key={candidate.candidateid}
+            className={`candidate-card ${
+              selectedCandidate === candidate.candidateid ? "selected" : ""
+            }`}
+          >
+            <div className="candidate-image-wrapper">
+              <img
+                src={`http://localhost:5000${candidate.image_url}`}
+                alt={candidate.name}
+                className="candidate-image"
+                onError={(e) => {
+                  e.target.src = "/default-avatar.png";
+                }}
+              />
+              {selectedCandidate === candidate.candidateid && (
+                <div className="selected-overlay">
+                  <span className="checkmark">✓</span>
+                </div>
+              )}
+            </div>
+
+            <div className="candidate-details">
+              <h3 className="candidate-name">{candidate.name}</h3>
+              <span className="party-badge">{candidate.party}</span>
+              <p className="candidate-bio">
+                {candidate.bio || "No biography available"}
+              </p>
+              <div className="candidate-stats">
+                <span className="stat-item">
+                  <i className="icon">📊</i>
+                  {candidate.voteCount || 0} votes
+                </span>
+              </div>
+              <button
+                className={`select-button ${
+                  selectedCandidate === candidate.candidateid ? "selected" : ""
+                }`}
+                onClick={() => setSelectedCandidate(candidate.candidateid)}
+                disabled={
+                  selectedCandidate &&
+                  selectedCandidate !== candidate.candidateid
+                }
+              >
+                {selectedCandidate === candidate.candidateid
+                  ? "Selected"
+                  : "Select Candidate"}
+              </button>
+            </div>
           </div>
         ))}
       </div>

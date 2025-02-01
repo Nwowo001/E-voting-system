@@ -33,12 +33,16 @@ const Results = () => {
       const data = await response.json();
 
       const totalVotes = data.reduce(
-        (sum, result) => sum + result.voteCount,
+        (sum, result) => sum + parseInt(result.vote_count, 10),
         0
       );
+
       const resultsWithPercentage = data.map((result) => ({
         ...result,
-        percentage: ((result.voteCount / totalVotes) * 100).toFixed(1),
+        percentage: (
+          (parseInt(result.vote_count, 10) / totalVotes) *
+          100
+        ).toFixed(1),
       }));
 
       setResults(resultsWithPercentage);
@@ -90,20 +94,23 @@ const Results = () => {
 
       <div className="results-grid">
         {results.map((result) => (
-          <div key={result.candidateId} className="result-card">
+          <div key={result.candidateid} className="result-card">
             <div className="candidate-info">
-              <img
-                src={`http://localhost:5000${result.image_url}`}
-                alt={result.name}
-                className="candidate-image"
-              />
+              {/* Only include image if image_url exists in your data */}
+              {result.image_url && (
+                <img
+                  src={`http://localhost:5000${result.image_url}`}
+                  alt={result.candidate_name}
+                  className="candidate-image"
+                />
+              )}
               <div className="candidate-details">
-                <h3>{result.name}</h3>
+                <h3>{result.candidate_name}</h3>
                 <p className="party-name">{result.party}</p>
               </div>
             </div>
 
-            <div className="vote-count">{result.voteCount} votes</div>
+            <div className="vote-count">{result.vote_count} votes</div>
 
             <div className="vote-percentage">
               <div className="percentage-bar">

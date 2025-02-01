@@ -107,6 +107,7 @@
   padding: 1.8rem;
   border-radius: 12px;
   box-shadow: var(--card-shadow);
+  position: relative;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -119,6 +120,9 @@
   color: var(--text-secondary);
   font-size: 1.1rem;
   margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .stat-card p {
@@ -223,5 +227,39 @@
 
   .admin-header h1 {
     font-size: 1.5rem;
+  }
+}
+/* Add these styles to your AdminDashboard.css file */
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  background-color: #ff4444;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 12px;
+  margin-left: 8px;
+  font-weight: bold;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background-color: white;
+  border-radius: 50%;
+  margin-right: 4px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
   }
 }

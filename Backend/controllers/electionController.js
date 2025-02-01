@@ -203,6 +203,28 @@ export const addElection = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error." });
   }
 };
+export const getAllElections = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        electionid,
+        title,
+        description,
+        start_date,
+        end_date,
+        isactive,
+        created_at
+      FROM elections
+      ORDER BY created_at DESC
+    `;
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching all elections:", error);
+    res.status(500).json({ message: "Failed to fetch elections" });
+  }
+};
 
 export const fetchElectionResults = async (req, res) => {
   const { electionId } = req.params;

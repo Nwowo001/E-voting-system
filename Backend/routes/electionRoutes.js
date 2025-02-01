@@ -7,6 +7,7 @@ import {
   deleteElection,
   updateElection,
   toggleElectionStatus,
+  getAllElections,
 } from "../controllers/electionController.js";
 import { authenticateToken, adminOnly } from "../middlewares/authMiddleware.js";
 const router = express.Router();
@@ -43,5 +44,7 @@ router.put(
     }
   }
 );
+
+router.get("/all", getAllElections);
 
 export default router;

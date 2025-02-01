@@ -6,6 +6,7 @@ import {
   getVotes,
   getUserVotes,
   castVote,
+  deleteInactiveVoters,
 } from "../controllers/votesController.js";
 
 const router = express.Router();
@@ -82,5 +83,6 @@ router.get("/votes/user", authenticateToken, async (req, res) => {
 
 // Now we can pass io dynamically, for example:
 router.post("/votes", (req, res) => recordVote(req, res, req.io)); // Use req.io instead of importing io directly
+router.delete("/inactive", authenticateToken, adminOnly, deleteInactiveVoters);
 
 export default router;

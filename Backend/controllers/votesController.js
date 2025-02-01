@@ -58,10 +58,12 @@ AND isactive= true`,
     await client.query("COMMIT");
 
     // Emit real-time update
-    io.emit("vote_recorded", {
-      electionid,
-      candidateid,
-    });
+    if (req.io) {
+      req.io.emit("vote_recorded", {
+        electionid,
+        candidateid,
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -114,5 +116,45 @@ export const getUserVotes = async (req, res) => {
     console.error("Error fetching user votes:", error.message);
 
     res.status(500).json({ error: error.message });
+  }
+};
+export const deleteInactiveVoters = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Get voters who missed 3 or more elections
+    const inactiveVoters = await client.query(`
+      WITH voter_participation AS (
+        SELECT 
+          u.id,
+          COUNT(DISTINCT e.electionid) as total_elections,
+          COUNT(DISTINCT v.electionid) as participated_elections
+        FROM users u
+        CROSS JOIN elections e
+        LEFT JOIN votes v ON u.id = v.voterid AND e.electionid = v.electionid
+        WHERE u.role = 'voter'
+        GROUP BY u.id
+        HAVING (COUNT(DISTINCT e.electionid) - COUNT(DISTINCT v.electionid)) >= 3
+      )
+      DELETE FROM users 
+      WHERE id IN (SELECT id FROM voter_participation)
+      AND role = 'voter'
+      RETURNING id, email
+    `);
+
+    await client.query("COMMIT");
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${inactiveVoters.rows.length} inactive voters`,
+      deletedVoters: inactiveVoters.rows,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Error deleting inactive voters:", error.message);
+    res.status(500).json({ error: "Failed to delete inactive voters" });
+  } finally {
+    client.release();
   }
 };

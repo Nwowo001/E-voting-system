@@ -88,7 +88,10 @@ io.on("connection", (socket) => {
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.json());
-
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 // Routes
 app.use("/api/candidates", candidateRoutes);
 app.use("/api/elections", electionRoutes);
@@ -103,7 +106,18 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.get("/", (req, res) => {
   res.send("E-voting backend is running.");
 });
-
+// In server.js, with your other routes
+app.post("/api/auth/logout", (req, res) => {
+  // Clear the session
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: "Could not log out" });
+    }
+    // Clear the cookie
+    res.clearCookie("connect.sid");
+    return res.status(200).json({ message: "Logged out successfully" });
+  });
+});
 // Start Server
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

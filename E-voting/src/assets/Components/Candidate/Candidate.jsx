@@ -19,6 +19,7 @@ const Candidate = () => {
   const [editCandidateId, setEditCandidateId] = useState(null);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchCandidates();
@@ -55,6 +56,23 @@ const Candidate = () => {
     e.preventDefault();
     setError("");
     setSuccessMessage("");
+    if (!newCandidate.name.trim()) {
+      setError("Candidate name is required");
+      return;
+    }
+    if (!newCandidate.party.trim()) {
+      setError("Party is required");
+      return;
+    }
+    if (!newCandidate.electionId) {
+      setError("Please select an election");
+      return;
+    }
+    if (!editCandidateId && !newCandidate.picture) {
+      setError("Please upload a candidate picture");
+      return;
+    }
+    setIsLoading(true);
 
     const formData = new FormData();
     formData.append("name", newCandidate.name);
@@ -76,6 +94,8 @@ const Candidate = () => {
       resetForm();
     } catch (err) {
       setError("An error occurred while saving the candidate.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -83,6 +103,32 @@ const Candidate = () => {
     setNewCandidate({ name: "", party: "", electionId: "", picture: null });
     setPicturePreview(null);
     setEditCandidateId(null);
+  };
+  // Add these functions before the return statement
+
+  const handleEdit = (candidate) => {
+    setEditCandidateId(candidate.candidateid);
+    setNewCandidate({
+      name: candidate.name,
+      party: candidate.party,
+      electionId: candidate.electionid,
+      picture: null, // Reset picture since we don't need to edit it immediately
+    });
+    // Clear any existing messages
+    setError("");
+    setSuccessMessage("");
+  };
+
+  const handleDisqualify = async (candidateId) => {
+    if (window.confirm("Are you sure you want to disqualify this candidate?")) {
+      try {
+        await axios.delete(`${API_URL}/candidates/${candidateId}`);
+        setSuccessMessage("Candidate disqualified successfully!");
+        fetchCandidates(); // Refresh the list
+      } catch (err) {
+        setError("Failed to disqualify candidate.");
+      }
+    }
   };
 
   return (
@@ -138,8 +184,16 @@ const Candidate = () => {
           </div>
         </div>
         <div className="form-actions">
-          <button type="submit" className="action-button submit-button">
-            {editCandidateId ? "Update Candidate" : "Add Candidate"}
+          <button
+            type="submit"
+            className="action-button submit-button"
+            disabled={isLoading}
+          >
+            {isLoading
+              ? "Processing..."
+              : editCandidateId
+              ? "Update Candidate"
+              : "Add Candidate"}
           </button>
           {editCandidateId && (
             <button
@@ -186,12 +240,14 @@ const Candidate = () => {
                     <button
                       className="action-button edit-button"
                       onClick={() => handleEdit(candidate)}
+                      disabled={isLoading}
                     >
                       Edit
                     </button>
                     <button
                       className="action-button delete-button"
                       onClick={() => handleDisqualify(candidate.candidateid)}
+                      disabled={isLoading}
                     >
                       Disqualify
                     </button>

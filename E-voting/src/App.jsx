@@ -11,7 +11,9 @@ import AdminDashboard from "./assets/Pages/adminDashboard";
 import { useUserContext } from "./Context/UserContext";
 import ElectionCandidates from "./assets/Components/ElectionCandidates/ElectionCandidates";
 import { UserProvider } from "./Context/UserContext";
-
+import Profile from "./assets/Pages/Profile";
+import VotingHistory from "./assets/Pages/VotingHistory";
+import Candidates from "./assets/Pages/Candidates";
 const AppContent = () => {
   const { user, setUser } = useUserContext();
   const [loading, setLoading] = useState(true);
@@ -71,6 +73,18 @@ const AppContent = () => {
           }
         />
         <Route
+          path="/login"
+          element={
+            isLoggedIn ? (
+              <Navigate
+                to={user?.role === "admin" ? "/admin-dashboard" : "/dashboard"}
+              />
+            ) : (
+              <Login />
+            )
+          }
+        />
+        <Route
           path="/dashboard"
           element={
             isLoggedIn && user?.role !== "admin" ? (
@@ -81,6 +95,20 @@ const AppContent = () => {
           }
         />
         <Route path="/vote/:electionId" element={<ElectionCandidates />} />
+        <Route path="/" element={<UserDashboard />} />{" "}
+        {/* UserDashboard route */}
+        <Route
+          path="/candidates"
+          element={isLoggedIn ? <Candidates /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/voting-history"
+          element={isLoggedIn ? <VotingHistory /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/profile"
+          element={isLoggedIn ? <Profile /> : <Navigate to="/" />}
+        />
       </Routes>
     </Router>
   );

@@ -7,6 +7,7 @@ const API_URL = "http://localhost:5000/api";
 
 const Election = () => {
   const [elections, setElections] = useState([]);
+  const [timeRemaining, setTimeRemaining] = useState({});
   const [newElection, setNewElection] = useState({
     title: "",
     description: "",
@@ -19,18 +20,54 @@ const Election = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      const updatedElections = elections.map((election) => {
+        const remaining = calculateTimeRemaining(
+          election.start_date,
+          election.start_time,
+          election.end_date,
+          election.end_time
+        );
+
+        if (remaining.status === "Active" && !election.isActive) {
+          handleToggleStatus(election.electionid, false);
+        } else if (remaining.status === "Ended" && election.isActive) {
+          handleToggleStatus(election.electionid, true);
+        }
+
+        return {
+          ...election,
+          timeRemaining: remaining,
+        };
+      });
+
+      setTimeRemaining((prevState) => ({
+        ...prevState,
+        ...updatedElections.reduce(
+          (acc, election) => ({
+            ...acc,
+            [election.electionid]: election.timeRemaining,
+          }),
+          {}
+        ),
+      }));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [elections]);
+
+  useEffect(() => {
     fetchElections();
   }, []);
 
-  // Fetch all elections
   const fetchElections = async () => {
     try {
       const response = await axios.get(`${API_URL}/elections`);
       setElections(
         response.data.map((election) => ({
           ...election,
-          start_date: election.start_date.slice(0, 10), // Format date to yyyy-MM-dd
-          end_date: election.end_date.slice(0, 10), // Format date to yyyy-MM-dd
+          start_date: election.start_date.slice(0, 10),
+          end_date: election.end_date.slice(0, 10),
         }))
       );
     } catch (error) {
@@ -38,7 +75,6 @@ const Election = () => {
     }
   };
 
-  // Create or update an election
   const handleCreateOrUpdateElection = async () => {
     const { title, description, start_date, end_date, start_time, end_time } =
       newElection;
@@ -58,11 +94,9 @@ const Election = () => {
     try {
       setLoading(true);
       if (editElectionId) {
-        // Update existing election
         await axios.put(`${API_URL}/elections/${editElectionId}`, newElection);
         console.log("Election updated successfully.");
       } else {
-        // Create new election
         await axios.post(`${API_URL}/elections`, newElection);
         console.log("Election created successfully.");
       }
@@ -82,7 +116,6 @@ const Election = () => {
     }
   };
 
-  // Delete an election
   const handleDeleteElection = async (electionId) => {
     if (!window.confirm("Are you sure you want to delete this election?")) {
       return;
@@ -98,14 +131,12 @@ const Election = () => {
     }
   };
 
-  // Toggle active/inactive status
   const handleToggleStatus = async (electionId, isActive) => {
     try {
       await axios.put(`${API_URL}/elections/${electionId}/status`, {
         isActive: !isActive,
       });
 
-      // Immediately update the local state
       setElections(
         elections.map((election) =>
           election.electionid === electionId
@@ -119,7 +150,31 @@ const Election = () => {
     }
   };
 
-  // Reset the form
+  const calculateTimeRemaining = (startDate, startTime, endDate, endTime) => {
+    const start = new Date(`${startDate}T${startTime}`);
+    const end = new Date(`${endDate}T${endTime}`);
+    const now = new Date();
+
+    if (now < start) {
+      return { status: "Pending", timeLeft: start - now };
+    } else if (now >= start && now <= end) {
+      return { status: "Active", timeLeft: end - now };
+    } else {
+      return { status: "Ended", timeLeft: 0 };
+    }
+  };
+
+  const formatTimeRemaining = (milliseconds) => {
+    if (milliseconds <= 0) return "Ended";
+
+    const seconds = Math.floor((milliseconds / 1000) % 60);
+    const minutes = Math.floor((milliseconds / 1000 / 60) % 60);
+    const hours = Math.floor((milliseconds / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(milliseconds / (1000 * 60 * 60 * 24));
+
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  };
+
   const resetForm = () => {
     setNewElection({
       title: "",
@@ -132,7 +187,6 @@ const Election = () => {
     setEditElectionId(null);
   };
 
-  // Edit an election
   const handleEditElection = (election) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
 
@@ -151,7 +205,6 @@ const Election = () => {
     <div>
       <h2>Manage Elections</h2>
 
-      {/* Create/Update Election Form */}
       <div className="form-group">
         <input
           type="text"
@@ -229,7 +282,6 @@ const Election = () => {
         )}
       </div>
 
-      {/* Display Elections in Table */}
       <table className="elections-table">
         <thead>
           <tr>
@@ -238,53 +290,71 @@ const Election = () => {
             <th>Start Date</th>
             <th>End Date</th>
             <th>Status</th>
+            <th>Time Remaining</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {elections.map((election) => (
-            <tr key={election.electionid}>
-              <td>{election.title}</td>
-              <td>{election.description}</td>
-              <td>{election.start_date}</td>
-              <td>{election.end_date}</td>
-              <td>{election.isActive ? "Active" : "Inactive"}</td>
-              <td>
-                <ButtonComponent
-                  backgroundColor="#17a2b8"
-                  color="white"
-                  fontSize="0.9rem"
-                  padding="5px 10px"
-                  borderRadius="5px"
-                  onClick={() => handleEditElection(election)}
-                >
-                  Edit
-                </ButtonComponent>
-                <ButtonComponent
-                  backgroundColor="#dc3545"
-                  color="white"
-                  fontSize="0.9rem"
-                  padding="5px 10px"
-                  borderRadius="5px"
-                  onClick={() => handleDeleteElection(election.electionid)}
-                >
-                  Delete
-                </ButtonComponent>
-                <ButtonComponent
-                  backgroundColor={election.isActive ? "#ffc107" : "#28a745"}
-                  color="white"
-                  fontSize="0.9rem"
-                  padding="5px 10px"
-                  borderRadius="5px"
-                  onClick={() =>
-                    handleToggleStatus(election.electionid, election.isActive)
-                  }
-                >
-                  {election.isActive ? "Deactivate" : "Activate"}
-                </ButtonComponent>
-              </td>
-            </tr>
-          ))}
+          {elections.map((election) => {
+            const remaining =
+              timeRemaining[election.electionid] ||
+              calculateTimeRemaining(
+                election.start_date,
+                election.start_time,
+                election.end_date,
+                election.end_time
+              );
+            return (
+              <tr key={election.electionid}>
+                <td>{election.title}</td>
+                <td>{election.description}</td>
+                <td>{`${election.start_date} ${election.start_time}`}</td>
+                <td>{`${election.end_date} ${election.end_time}`}</td>
+                <td>
+                  <span
+                    className={`status-badge ${remaining.status.toLowerCase()}`}
+                  >
+                    {remaining.status}
+                  </span>
+                </td>
+                <td>{formatTimeRemaining(remaining.timeLeft)}</td>
+                <td>
+                  <ButtonComponent
+                    backgroundColor="#17a2b8"
+                    color="white"
+                    fontSize="0.9rem"
+                    padding="5px 10px"
+                    borderRadius="5px"
+                    onClick={() => handleEditElection(election)}
+                  >
+                    Edit
+                  </ButtonComponent>
+                  <ButtonComponent
+                    backgroundColor="#dc3545"
+                    color="white"
+                    fontSize="0.9rem"
+                    padding="5px 10px"
+                    borderRadius="5px"
+                    onClick={() => handleDeleteElection(election.electionid)}
+                  >
+                    Delete
+                  </ButtonComponent>
+                  {/* <ButtonComponent
+                    backgroundColor={election.isActive ? "#ffc107" : "#28a745"}
+                    color="white"
+                    fontSize="0.9rem"
+                    padding="5px 10px"
+                    borderRadius="5px"
+                    onClick={() =>
+                      handleToggleStatus(election.electionid, election.isActive)
+                    }
+                  >
+                    {election.isActive ? "Deactivate" : "Activate"}
+                  </ButtonComponent> */}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

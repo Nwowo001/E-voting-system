@@ -2,9 +2,39 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../dbConfig.js";
 import dotenv from "dotenv";
+import path from "path";
+import multer from "multer";
 
 dotenv.config();
+// Multer storage settings
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/"); // Ensure this folder exists
+  },
+  filename: (req, file, cb) => {
+    cb(null, `profile_${req.user.id}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage });
 
+// Profile image upload route
+export const uploadProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const imageUrl = `/uploads/${req.file.filename}`;
+    await pool.query("UPDATE users SET profile_image = $1 WHERE id = $2", [
+      imageUrl,
+      req.user.id,
+    ]);
+
+    res.status(200).json({ message: "Profile image updated", imageUrl });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update profile image" });
+  }
+};
 export const signUp = async (req, res) => {
   const { name, email, password, nin, voterid } = req.body;
 
@@ -199,15 +229,20 @@ export const refreshSession = async (req, res) => {
   return res.status(200).json({ message: "Session refreshed" });
 };
 
-export const logout = (req, res) => {
-  // Clear session
-  req.session.destroy();
+export const logout = async (req, res) => {
+  try {
+    // Clear the JWT token by setting an expired cookie
+    res.cookie("jwt", "", {
+      httpOnly: true,
+      expires: new Date(0),
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
 
-  // Clear cookies
-  res.clearCookie("authToken");
-  res.clearCookie("sessionId");
-
-  return res.status(200).json({ message: "Logged out successfully" });
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 export const getUserInfo = async (req, res) => {

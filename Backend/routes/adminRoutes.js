@@ -23,6 +23,7 @@ import {
 import { getAuditLogs } from "../controllers/auditController.js";
 import { getVoteCounts } from "../controllers/statsController.js";
 import { pool } from "../dbConfig.js";
+import { logout } from "../controllers/userController.js";
 const router = express.Router();
 
 // Election Management
@@ -87,6 +88,7 @@ router.get("/dashboard-stats", async (req, res) => {
   }
 });
 
+router.post("/logout", logout);
 // Authenticated User Info
 router.get("/me", authenticateToken, (req, res) => {
   const user = req.user;
@@ -121,17 +123,5 @@ router.get("/auth/me", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-router.post("/logout", authenticateToken, (req, res) => {
-  try {
-    // Clear the user session or token
-    res.clearCookie("connect.sid"); // Clear the session cookie
-    res.clearCookie("authToken"); // Clear JWT token if used in cookies
-    req.session.destroy(() => {
-      res.status(200).json({ message: "Logout successful" });
-    });
-  } catch (error) {
-    console.error("Logout error:", error.message);
-    res.status(500).json({ error: "Logout failed" });
-  }
-});
+
 export default router;

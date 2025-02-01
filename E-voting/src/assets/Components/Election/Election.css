@@ -48,10 +48,14 @@
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  border-collapse: collapse;
+  margin: 20px 0;
 }
 
 .elections-table thead {
   background: #f8f9fa;
+  position: sticky;
+  top: 0;
 }
 
 .elections-table th {
@@ -60,21 +64,27 @@
   color: #2c3e50;
   font-weight: 600;
   border-bottom: 2px solid #e9ecef;
+  white-space: nowrap;
 }
 
 .elections-table td {
   padding: 1.2rem;
   color: #2c3e50;
   border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
 }
 
 .elections-table tr:hover {
   background: #f8f9fa;
+  transform: scale(1.001);
 }
-
+.elections-table td button {
+  margin-right: 8px;
+}
 .action-buttons {
   display: flex;
   gap: 0.8rem;
+  flex-direction: row;
 }
 
 .btn {
@@ -157,5 +167,31 @@
   .elections-table {
     display: block;
     overflow-x: auto;
+    white-space: nowrap;
   }
+  .elections-table th,
+  .elections-table td {
+    padding: 1rem 0.8rem;
+  }
+}
+.status-badge {
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.status-badge.pending {
+  background-color: #ffd700;
+  color: #000;
+}
+
+.status-badge.active {
+  background-color: #28a745;
+  color: white;
+}
+
+.status-badge.ended {
+  background-color: #dc3545;
+  color: white;
 }
