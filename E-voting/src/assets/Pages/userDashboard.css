@@ -1,0 +1,340 @@
+:root {
+  --primary-color: #1a237e;
+  --secondary-color: #1976d2;
+  --accent-color: #00c853;
+  --background-light: #f5f7fa;
+  --text-primary: #2c3e50;
+  --text-secondary: #546e7a;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --hover-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.dashboard-container {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+  background: var(--background-light);
+}
+
+.sidebar {
+  background: linear-gradient(145deg, #2c3e50, #34495e);
+  padding: 2rem 0;
+  position: fixed;
+  height: 100vh;
+  width: 280px;
+  color: white;
+}
+
+.sidebar-logo {
+  padding: 0 2rem;
+  margin-bottom: 2rem;
+}
+
+.sidebar-logo img {
+  width: 100%;
+  max-width: 200px;
+  border-radius: 12px;
+}
+.sidebar-logo img:hover {
+  transform: scale(1.05);
+}
+.user-info {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-info h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0;
+}
+sidebar-nav li {
+  margin: 0.5rem 0;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.sidebar-nav li a {
+  display: block;
+  padding: 0.8rem 1.5rem;
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+
+.sidebar-nav li a:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(5px);
+}
+.sidebar-nav li a.active {
+  background: var(--secondary-color);
+  box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
+}
+
+.main-content {
+  margin-left: 280px;
+  padding: 2rem;
+  width: calc(100vw - 350px); /* Add this line */
+  min-height: 100vh;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+.header-title h1 {
+  color: var(--primary-color);
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.logout-btn {
+  background: linear-gradient(to right, #e74c3c, #c0392b);
+  color: white;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+}
+
+.election-section h2,
+.stats-section h2 {
+  color: var(--primary-color);
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.election-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  width: 100%; /* Add this line */
+}
+
+.election-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.8rem;
+  box-shadow: var(--card-shadow);
+  transition: all 0.3s ease;
+}
+
+.election-card:hover {
+  transform: translateY(-5px);
+  transition: transform 0.3s ease;
+  box-shadow: var(--hover-shadow);
+
+}
+
+.election-status {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.voted-badge,
+.pending-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-color);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+.voted-badge {
+  background-color: #17a2b8;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.pending-badge {
+  background-color: #ffc107;
+  color: black;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+.live-results-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+.chart-container {
+  background: var(--background-light);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.custom-tooltip {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.total-votes {
+  text-align: center;
+  font-size: 1.2rem;
+  color: var(--primary-color);
+  margin-top: 1rem;
+}
+
+.vote-btn {
+  width: 100%;
+  padding: 1rem;
+  margin-top: 1rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.vote-btn:not(.voted) {
+  background: linear-gradient(to right, var(--secondary-color), #2980b9);
+  color: white;
+}
+
+.vote-btn.voted {
+  background: #e2e8f0;
+  color: #64748b;
+  cursor: not-allowed;
+}
+.stats-section {
+  margin: 2rem 0;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+  width: 100%; /* Add this line */
+}
+
+.stat-card {
+  background: white;
+  padding: 1.8rem;
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--hover-shadow);
+}
+
+.stat-card h3 {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-bottom: 0.8rem;
+}
+.stat-card p {
+  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.loader {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--secondary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+@media (max-width: 1024px) {
+  .dashboard-container {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding: 1.5rem;
+
+  }
+}
+
+@media (max-width: 768px) {
+  .election-grid,
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+  .stat-card {
+    padding: 1.5rem;
+  }
+  
+  .stat-card p {
+    font-size: 1.5rem;
+  }
+}
+  .dashboard-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+}
