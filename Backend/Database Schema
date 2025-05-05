@@ -1,0 +1,84 @@
+-- USERS TABLE
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    nin VARCHAR(20) UNIQUE NOT NULL,
+    voterid VARCHAR(50) UNIQUE NOT NULL,
+    role VARCHAR(20) DEFAULT 'voter', -- 'voter' or 'admin'
+    display_name VARCHAR(100),
+    profile_image TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ADMINS TABLE
+CREATE TABLE admins (
+    id SERIAL PRIMARY KEY,
+    userid INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    is_superadmin BOOLEAN DEFAULT FALSE
+);
+
+-- ELECTIONS TABLE
+CREATE TABLE elections (
+    electionid SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    isactive BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CANDIDATES TABLE
+CREATE TABLE candidates (
+    candidateid SERIAL PRIMARY KEY,
+    electionid INTEGER REFERENCES elections(electionid) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    party VARCHAR(100) NOT NULL,
+    image_url TEXT,
+    vote_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- VOTERS TABLE (linking users to elections)
+CREATE TABLE voters (
+    voterid SERIAL PRIMARY KEY,
+    userid INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    electionid INTEGER REFERENCES elections(electionid) ON DELETE CASCADE,
+    has_voted BOOLEAN DEFAULT FALSE,
+    UNIQUE(userid, electionid)
+);
+
+-- VOTES TABLE
+CREATE TABLE votes (
+    voteid SERIAL PRIMARY KEY,
+    electionid INTEGER REFERENCES elections(electionid) ON DELETE CASCADE,
+    voterid INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    candidateid INTEGER REFERENCES candidates(candidateid) ON DELETE CASCADE,
+    votetimestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(voterid, electionid)
+);
+
+-- VOTECOUNTS TABLE (for real-time update tracking)
+CREATE TABLE votecounts (
+    candidateid INTEGER PRIMARY KEY REFERENCES candidates(candidateid) ON DELETE CASCADE,
+    votecount INTEGER DEFAULT 0
+);
+
+-- AUDIT LOGS TABLE
+CREATE TABLE audits (
+    id SERIAL PRIMARY KEY,
+    action VARCHAR(255) NOT NULL,
+    performed_by INTEGER REFERENCES users(id),
+    details TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- INDEXES FOR PERFORMANCE
+CREATE INDEX idx_elections_active ON elections(isactive);
+CREATE INDEX idx_votes_candidate ON votes(candidateid);
+CREATE INDEX idx_votes_voter_election ON votes(voterid, electionid);
+CREATE INDEX idx_voters_user_election ON voters(userid, electionid);

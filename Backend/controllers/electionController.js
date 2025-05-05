@@ -1,3 +1,4 @@
+// electionController.js
 import { pool } from "../dbConfig.js";
 
 export const createElection = async (req, res) => {
