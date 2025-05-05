@@ -1,3 +1,4 @@
+// userController.js
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../dbConfig.js";

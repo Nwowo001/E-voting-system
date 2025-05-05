@@ -4,8 +4,7 @@ import axios from "axios";
 import "./Login.css";
 import { useUserContext } from "../../Context/UserContext";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api/users";
+const API_URL = "http://localhost:5000/api/users";
 
 const Login = () => {
   const { setUser } = useUserContext();
@@ -80,10 +79,24 @@ const Login = () => {
           return;
         }
 
-        const { user } = response.data;
+        const { user, token } = response.data;
+        
+        // Debug the user data
+        console.log("User data from login:", user);
+        console.log("User role:", user.role);
+        
+        // Store user data and token in localStorage
+        localStorage.setItem("user", JSON.stringify(user));
+        localStorage.setItem("token", token);
+        
+        // Clear welcome flag to show welcome message on next login
+        localStorage.removeItem("welcomeShown");
+        
+        // Update context
         setUser(user);
-        const redirectPath =
-          user.role === "admin" ? "/admin-dashboard" : "/dashboard";
+        
+        // Redirect based on role
+        const redirectPath = user.role === "admin" ? "/admin-dashboard" : "/dashboard";
         navigate(redirectPath);
       } catch (error) {
         const errorMessage =
@@ -112,6 +125,7 @@ const Login = () => {
     setIsLogin(!isLogin);
     resetForm();
   };
+  
   return (
     <div className="signin-container">
       <div className="signin-form">

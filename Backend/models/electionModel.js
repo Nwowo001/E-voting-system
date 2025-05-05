@@ -1,3 +1,4 @@
+// electionModel.js
 import { pool } from "../dbConfig.js";
 
 export const getAllElections = async () => {

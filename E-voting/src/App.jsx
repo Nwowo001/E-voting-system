@@ -14,16 +14,25 @@ import { UserProvider } from "./Context/UserContext";
 import Profile from "./assets/Pages/Profile";
 import VotingHistory from "./assets/Pages/VotingHistory";
 import Candidates from "./assets/Pages/Candidates";
+import { ThemeProvider } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import theme from "./theme";
+
 const AppContent = () => {
   const { user, setUser } = useUserContext();
   const [loading, setLoading] = useState(true);
 
+  // Load user data from localStorage on app initialization
   useEffect(() => {
     try {
       const token = localStorage.getItem("token");
       const userData = localStorage.getItem("user");
+      
+      console.log("Loading user data from localStorage:", userData);
+      
       if (token && userData) {
         const parsedUser = JSON.parse(userData);
+        console.log("Parsed user role:", parsedUser.role);
         setUser(parsedUser);
       }
     } catch (error) {
@@ -34,81 +43,117 @@ const AppContent = () => {
     }
   }, [setUser]);
 
+  // Centralized logout function
   const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    console.log("Logging out user");
+    
+    // Clear localStorage
+    localStorage.clear();
+    
+    // Update context
     setUser(null);
+    
+    // Force a complete page reload to ensure clean state
+    window.location.href = "/login";
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="loading-container">
+        <div className="loader"></div>
+        <p>Loading...</p>
+      </div>
+    );
   }
 
+  // Check if user is admin
   const isAdmin = user?.role === "admin";
+  console.log("Current user role:", user?.role);
+  console.log("Is admin?", isAdmin);
+  
   const isLoggedIn = Boolean(user);
 
   return (
     <Router>
       <Routes>
+        {/* Root route - redirects based on auth status and role */}
         <Route
           path="/"
           element={
             isLoggedIn ? (
-              <Navigate
-                to={user?.role === "admin" ? "/admin-dashboard" : "/dashboard"}
-              />
+              <Navigate to={isAdmin ? "/admin-dashboard" : "/dashboard"} />
             ) : (
               <Login />
             )
           }
         />
-        <Route
-          path="/admin-dashboard"
-          element={
-            isLoggedIn && user?.role === "admin" ? (
-              <AdminDashboard onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
+        
+        {/* Login route */}
         <Route
           path="/login"
           element={
             isLoggedIn ? (
-              <Navigate
-                to={user?.role === "admin" ? "/admin-dashboard" : "/dashboard"}
-              />
+              <Navigate to={isAdmin ? "/admin-dashboard" : "/dashboard"} />
             ) : (
               <Login />
             )
           }
         />
+        
+        {/* Admin Dashboard - protected */}
         <Route
-          path="/dashboard"
+          path="/admin-dashboard"
           element={
-            isLoggedIn && user?.role !== "admin" ? (
-              <UserDashboard onLogout={handleLogout} />
+            isLoggedIn && isAdmin ? (
+              <AdminDashboard onLogout={handleLogout} />
+            ) : isLoggedIn ? (
+              <Navigate to="/dashboard" />
             ) : (
-              <Navigate to="/" />
+              <Navigate to="/login" />
             )
           }
         />
-        <Route path="/vote/:electionId" element={<ElectionCandidates />} />
-        <Route path="/" element={<UserDashboard />} />{" "}
-        {/* UserDashboard route */}
+        
+        {/* User Dashboard - protected */}
+        <Route
+          path="/dashboard"
+          element={
+            isLoggedIn ? (
+              <UserDashboard onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        
+        {/* Voting route */}
+        <Route 
+          path="/vote/:electionId" 
+          element={
+            isLoggedIn ? (
+              <ElectionCandidates />
+            ) : (
+              <Navigate to="/login" />
+            )
+          } 
+        />
+        
+        {/* Other protected routes */}
         <Route
           path="/candidates"
-          element={isLoggedIn ? <Candidates /> : <Navigate to="/" />}
+          element={isLoggedIn ? <Candidates /> : <Navigate to="/login" />}
         />
         <Route
           path="/voting-history"
-          element={isLoggedIn ? <VotingHistory /> : <Navigate to="/" />}
+          element={isLoggedIn ? <VotingHistory /> : <Navigate to="/login" />}
         />
         <Route
           path="/profile"
-          element={isLoggedIn ? <Profile /> : <Navigate to="/" />}
+          element={isLoggedIn ? <Profile /> : <Navigate to="/login" />}
         />
+        
+        {/* Catch-all route */}
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );
@@ -117,7 +162,10 @@ const AppContent = () => {
 const App = () => {
   return (
     <UserProvider>
-      <AppContent />
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AppContent />
+      </ThemeProvider>
     </UserProvider>
   );
 };
