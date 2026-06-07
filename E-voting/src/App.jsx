@@ -14,9 +14,7 @@ import { UserProvider } from "./Context/UserContext";
 import Profile from "./assets/Pages/Profile";
 import VotingHistory from "./assets/Pages/VotingHistory";
 import Candidates from "./assets/Pages/Candidates";
-import { ThemeProvider } from "@mui/material/styles";
-import CssBaseline from "@mui/material/CssBaseline";
-import theme from "./theme";
+
 
 const AppContent = () => {
   const { user, setUser } = useUserContext();
@@ -59,9 +57,9 @@ const AppContent = () => {
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="loader"></div>
-        <p>Loading...</p>
+      <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center gap-4">
+        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-400 text-sm">Loading...</p>
       </div>
     );
   }
@@ -162,10 +160,7 @@ const AppContent = () => {
 const App = () => {
   return (
     <UserProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <AppContent />
-      </ThemeProvider>
+      <AppContent />
     </UserProvider>
   );
 };

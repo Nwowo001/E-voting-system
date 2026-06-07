@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import axios from "axios";
-import "./Profile.css";
 import { useNavigate } from "react-router-dom";
 import { useUserContext } from "../../Context/UserContext";
 import { toast, ToastContainer } from "react-toastify";
@@ -19,10 +18,13 @@ import {
   FaSave, 
   FaTimes, 
   FaEye, 
-  FaEyeSlash 
+  FaEyeSlash,
+  FaSpinner,
+  FaCheckCircle,
+  FaTimesCircle
 } from "react-icons/fa";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -34,13 +36,10 @@ const Profile = () => {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
-  const [votingHistory, setVotingHistory] = useState([]);
-  const [votingHistoryLoading, setVotingHistoryLoading] = useState(false);
-  const [securityInfo, setSecurityInfo] = useState({
-    lastLogin: "N/A",
-    loginAttempts: 0,
-    accountCreated: "N/A",
-  });
+  
+  const [participationHistory, setParticipationHistory] = useState([]);
+  const [participationLoading, setParticipationLoading] = useState(false);
+  
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -53,23 +52,24 @@ const Profile = () => {
     confirm: false,
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
+  
   const [editedUser, setEditedUser] = useState({
     name: "",
     email: "",
+    display_name: "",
     phone: "",
     bio: "",
   });
   
-  // Use a ref to prevent unnecessary re-renders of the image
   const imageUrlRef = useRef(null);
 
   useEffect(() => {
     fetchUserData();
+  }, []);
+
+  useEffect(() => {
     if (activeTab === "voting-history") {
-      fetchVotingHistory();
-    }
-    if (activeTab === "security") {
-      fetchSecurityInfo();
+      fetchParticipation();
     }
   }, [activeTab]);
 
@@ -85,131 +85,58 @@ const Profile = () => {
       setEditedUser({
         name: userData.name || "",
         email: userData.email || "",
+        display_name: userData.display_name || "",
         phone: userData.phone || "",
         bio: userData.bio || "",
       });
       
-      // Handle profile image URL - only update if it's different
-      if (userData.profileImage) {
-        const imageUrl = userData.profileImage;
+      if (userData.profile_image) {
+        const imageUrl = userData.profile_image;
         const fullImageUrl = imageUrl.startsWith('http') ? 
           imageUrl : 
-          `${API_URL}/${imageUrl.replace(/^\//, '')}`;
+          `${API_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
         
-        // Only update if the image URL has changed
         if (imageUrlRef.current !== fullImageUrl) {
           imageUrlRef.current = fullImageUrl;
           setProfileImage(fullImageUrl);
         }
-      } else if (!profileImage) {
-        setProfileImage("/default-avatar.png");
+      } else {
+        setProfileImage(null);
       }
       
       setLoading(false);
     } catch (error) {
-      console.error("Failed to load profile data:", error);
       toast.error("Failed to load profile data");
       setLoading(false);
     }
   };
 
-  const fetchVotingHistory = async () => {
-    setVotingHistoryLoading(true);
+  const fetchParticipation = async () => {
+    setParticipationLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/votes/user`, {
+      const response = await axios.get(`${API_URL}/voters/participation`, {
         withCredentials: true,
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      // Get election details for each vote
-      const votesWithDetails = await Promise.all(
-        response.data.map(async (vote) => {
-          try {
-            const electionResponse = await axios.get(
-              `${API_URL}/elections/${vote.electionid}`,
-              {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${token}` }
-              }
-            );
-            
-            const candidateResponse = await axios.get(
-              `${API_URL}/candidates/${vote.candidateid}`,
-              {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${token}` }
-              }
-            );
-            
-            return {
-              ...vote,
-              electionTitle: electionResponse.data.title,
-              candidateName: candidateResponse.data.name,
-              candidateParty: candidateResponse.data.party,
-            };
-          } catch (error) {
-            return {
-              ...vote,
-              electionTitle: "Unknown Election",
-              candidateName: "Unknown Candidate",
-              candidateParty: "Unknown Party",
-            };
-          }
-        })
-      );
-      
-      setVotingHistory(votesWithDetails);
+      setParticipationHistory(response.data);
     } catch (error) {
-      console.error("Failed to load voting history:", error);
-      toast.error("Failed to load voting history");
+      toast.error("Failed to load participation history");
     } finally {
-      setVotingHistoryLoading(false);
+      setParticipationLoading(false);
     }
   };
 
-  const fetchSecurityInfo = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/auth/security-info`, {
-        withCredentials: true,
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setSecurityInfo({
-        lastLogin: new Date(response.data.lastLogin).toLocaleString() || "N/A",
-        loginAttempts: response.data.loginAttempts || 0,
-        accountCreated: new Date(response.data.created_at).toLocaleDateString() || "N/A",
-      });
-    } catch (error) {
-      console.error("Failed to load security info:", error);
-      // Use fallback data from user object if available
-      if (user) {
-        setSecurityInfo({
-          lastLogin: "N/A",
-          loginAttempts: 0,
-          accountCreated: user.created_at 
-            ? new Date(user.created_at).toLocaleDateString() 
-            : "N/A",
-        });
-      }
-    }
-  };
-
-  // Function to update both context and localStorage
   const updateUserData = (updatedData) => {
-    // Update localStorage
     try {
       const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
       const newUserData = { ...storedUser, ...updatedData };
       localStorage.setItem('user', JSON.stringify(newUserData));
-      
-      // Update context if setUser is available
       if (userContext && typeof userContext.setUser === 'function') {
         userContext.setUser(newUserData);
       }
     } catch (error) {
-      console.error("Error updating user data:", error);
+      console.error(error);
     }
   };
 
@@ -221,7 +148,6 @@ const Profile = () => {
         return;
       }
 
-      // Show preview immediately
       const reader = new FileReader();
       reader.onloadend = () => setPreviewImage(reader.result);
       reader.readAsDataURL(file);
@@ -244,25 +170,17 @@ const Profile = () => {
           }
         );
 
-        // Make sure we're using the full URL path
         const imageUrl = response.data.imageUrl;
         const fullImageUrl = imageUrl.startsWith('http') ? 
           imageUrl : 
-          `${API_URL}/${imageUrl.replace(/^\//, '')}`;
+          `${API_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
         
-        // Update ref to prevent re-renders
         imageUrlRef.current = fullImageUrl;
         setProfileImage(fullImageUrl);
-        
-        // Update user data in both context and localStorage
         updateUserData({ profileImage: fullImageUrl });
-        
         toast.success("Profile image updated successfully");
-        
-        // Refresh user data to ensure we have the latest
-        await fetchUserData();
+        fetchUserData();
       } catch (error) {
-        console.error("Image upload error:", error);
         toast.error("Failed to upload profile image");
       } finally {
         setUploadLoading(false);
@@ -298,7 +216,13 @@ const Profile = () => {
       const token = localStorage.getItem("token");
       const response = await axios.post(
         `${API_URL}/users/update-profile`,
-        editedUser,
+        {
+          name: editedUser.name,
+          email: editedUser.email,
+          display_name: editedUser.display_name,
+          phone: editedUser.phone,
+          bio: editedUser.bio
+        },
         {
           withCredentials: true,
           headers: { 
@@ -308,25 +232,16 @@ const Profile = () => {
         }
       );
 
-      // Get the updated user data from response
       const updatedUserData = response.data;
-      
-      // Update local state
       setUser((prevUser) => ({
         ...prevUser,
         ...updatedUserData
       }));
-      
-      // Update user data in both context and localStorage
       updateUserData(updatedUserData);
-      
       setIsEditing(false);
       toast.success("Profile updated successfully");
-      
-      // Refresh user data to ensure we have the latest
-      await fetchUserData();
+      fetchUserData();
     } catch (error) {
-      console.error("Profile update error:", error);
       toast.error("Failed to update profile");
     }
   };
@@ -334,7 +249,6 @@ const Profile = () => {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     
-    // Validate passwords
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error("New passwords don't match");
       return;
@@ -371,11 +285,7 @@ const Profile = () => {
       });
       setShowPasswordForm(false);
     } catch (error) {
-      if (error.response?.status === 401) {
-        toast.error("Current password is incorrect");
-      } else {
-        toast.error("Failed to change password");
-      }
+      toast.error(error.response?.data?.message || "Failed to change password");
     } finally {
       setPasswordLoading(false);
     }
@@ -383,369 +293,403 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <div className="loading-spinner">
-        <div className="spinner"></div>
-        <p>Loading profile...</p>
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <FaSpinner className="text-4xl text-indigo-500 animate-spin mx-auto mb-3" />
+          <p className="text-text-muted">Loading settings...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="profile-container">
-      <ToastContainer position="top-right" autoClose={3000} />
-      <div className="profile-header">
-        <button onClick={() => navigate("/dashboard")} className="back-button">
-          <FaArrowLeft /> Back to Dashboard
-        </button>
-        <h2>Profile Settings</h2>
+    <div className="min-h-screen bg-bg text-text p-4 sm:p-6 lg:p-8 transition-colors duration-300">
+      {/* Background orbs */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl animate-pulse" />
       </div>
 
-      <div className="profile-tabs">
-        <button 
-          className={`tab-button ${activeTab === "profile" ? "active" : ""}`}
-          onClick={() => setActiveTab("profile")}
-        >
-          <FaUser /> Profile
-        </button>
-        <button 
-          className={`tab-button ${activeTab === "voting-history" ? "active" : ""}`}
-          onClick={() => setActiveTab("voting-history")}
-        >
-          <FaHistory /> Voting History
-        </button>
-        <button 
-          className={`tab-button ${activeTab === "security" ? "active" : ""}`}
-          onClick={() => setActiveTab("security")}
-        >
-          <FaLock /> Security
-        </button>
-      </div>
+      <div className="relative z-10 max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(user.role === 'admin' ? '/admin-dashboard' : '/dashboard')}
+            className="flex items-center justify-center p-2 rounded-lg bg-surface-2/40 border border-border text-text-muted hover:text-text hover:bg-surface-2 transition-all cursor-pointer"
+          >
+            <FaArrowLeft />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-text flex items-center gap-2">
+              Profile Settings
+            </h1>
+            <p className="text-text-muted text-sm font-medium">Update your public details and manage account preferences</p>
+          </div>
+        </div>
 
-      <div className="profile-content">
-        {activeTab === "profile" && (
-          <div className="profile-card">
-            <div className="profile-image-section">
-              <div className="image-container">
-                {uploadLoading && (
-                  <div className="upload-overlay">
-                    <div className="spinner small"></div>
+        {/* Tab Selection */}
+        <div className="flex bg-surface-2/30 border border-border p-1 rounded-xl w-fit">
+          <button 
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "profile" ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25" : "text-text-muted hover:text-text"
+            }`}
+            onClick={() => setActiveTab("profile")}
+          >
+            <FaUser /> Profile Details
+          </button>
+          <button 
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "voting-history" ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25" : "text-text-muted hover:text-text"
+            }`}
+            onClick={() => setActiveTab("voting-history")}
+          >
+            <FaHistory /> Participation Ledger
+          </button>
+          <button 
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "security" ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25" : "text-text-muted hover:text-text"
+            }`}
+            onClick={() => setActiveTab("security")}
+          >
+            <FaLock /> Security Settings
+          </button>
+        </div>
+
+        {/* Contents */}
+        <div className="bg-surface/20 border border-border rounded-2xl p-6 backdrop-blur-xl transition-all duration-300">
+          {activeTab === "profile" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Photo Area */}
+              <div className="flex flex-col items-center space-y-4 md:border-r md:border-border/50 md:pr-8">
+                <div className="relative group w-36 h-36 rounded-full overflow-hidden bg-surface border-2 border-border flex items-center justify-center">
+                  {uploadLoading && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+                      <FaSpinner className="text-2xl text-indigo-400 animate-spin" />
+                    </div>
+                  )}
+                  {previewImage || profileImage ? (
+                    <img
+                      src={previewImage || profileImage}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                        e.target.nextSibling.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div className="absolute inset-0 items-center justify-center text-4xl bg-surface flex">
+                    👤
                   </div>
-                )}
-                <img
-                  src={previewImage || profileImage || "/default-avatar.png"}
-                  alt="Profile"
-                  className="profile-image"
-                  onError={(e) => {
-                    e.target.src = "/default-avatar.png";
-                    e.target.onerror = null; // Prevent infinite error loop
-                  }}
-                  key={profileImage} // Add key to force re-render when image changes
+                  
+                  {/* Photo selector label */}
+                  <label htmlFor="profileImageInput" className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white cursor-pointer transition-all">
+                    <FaCamera className="text-xl" />
+                  </label>
+                </div>
+                
+                <input
+                  type="file"
+                  id="profileImageInput"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
                 />
-                <label htmlFor="profileImage" className="camera-icon">
-                  <FaCamera />
-                </label>
+                
+                <div className="text-center">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-600/10 text-indigo-400 border border-indigo-500/20">
+                    {user.role} Privilege
+                  </span>
+                </div>
               </div>
-              <input
-                type="file"
-                id="profileImage"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="hidden"
-              />
-              <label htmlFor="profileImage" className="change-photo-btn">
-                Change Photo
-              </label>
-              <div className="user-role">
-                <span className="role-badge">{user.role}</span>
-              </div>
-            </div>
 
-            <div className="profile-info">
-              {isEditing ? (
-                                <div className="edit-form">
-                                <div className="form-group">
-                                  <label><FaUser /> Full Name</label>
-                                  <input
-                                    type="text"
-                                    name="name"
-                                    value={editedUser.name}
-                                    onChange={handleInputChange}
-                                    placeholder="Enter your full name"
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label><FaEnvelope /> Email</label>
-                                  <input
-                                    type="email"
-                                    name="email"
-                                    value={editedUser.email}
-                                    onChange={handleInputChange}
-                                    placeholder="Enter your email"
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label><FaPhone /> Phone Number</label>
-                                  <input
-                                    type="text"
-                                    name="phone"
-                                    value={editedUser.phone || ""}
-                                    onChange={handleInputChange}
-                                    placeholder="Enter your phone number"
-                                  />
-                                </div>
-                                <div className="form-group">
-                                  <label>Bio</label>
-                                  <textarea
-                                    name="bio"
-                                    value={editedUser.bio || ""}
-                                    onChange={handleInputChange}
-                                    placeholder="Tell us about yourself"
-                                    rows="4"
-                                  ></textarea>
-                                </div>
-                                <div className="button-group">
-                                  <button onClick={handleSaveChanges} className="save-btn">
-                                    <FaSave /> Save Changes
-                                  </button>
-                                  <button
-                                    onClick={() => setIsEditing(false)}
-                                    className="cancel-btn"
-                                  >
-                                    <FaTimes /> Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="info-display">
-                                <div className="info-group">
-                                  <label><FaUser /> Full Name</label>
-                                  <p>{user.name}</p>
-                                </div>
-                                <div className="info-group">
-                                  <label><FaEnvelope /> Email</label>
-                                  <p>{user.email}</p>
-                                </div>
-                                <div className="info-group">
-                                  <label><FaIdCard /> Voter ID</label>
-                                  <p>{user.voterid}</p>
-                                </div>
-                                <div className="info-group">
-                                  <label><FaPhone /> Phone Number</label>
-                                  <p>{user.phone || "Not provided"}</p>
-                                </div>
-                                {user.bio && (
-                                  <div className="info-group">
-                                    <label>Bio</label>
-                                    <p className="user-bio">{user.bio}</p>
-                                  </div>
-                                )}
-                                <button onClick={() => setIsEditing(true)} className="edit-btn">
-                                  <FaEdit /> Edit Profile
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-              
-                      {activeTab === "voting-history" && (
-                        <div className="voting-history-card">
-                          <h3><FaVoteYea /> Your Voting History</h3>
-                          
-                          {votingHistoryLoading ? (
-                            <div className="loading-spinner centered">
-                              <div className="spinner small"></div>
-                              <p>Loading voting history...</p>
-                            </div>
-                          ) : votingHistory.length > 0 ? (
-                            <div className="voting-history-list">
-                              {votingHistory.map((vote, index) => (
-                                <div key={index} className="vote-record">
-                                  <div className="vote-header">
-                                    <h4>{vote.electionTitle}</h4>
-                                    <span className="vote-date">
-                                      {new Date(vote.votetimestamp).toLocaleDateString()} at {new Date(vote.votetimestamp).toLocaleTimeString()}
-                                    </span>
-                                  </div>
-                                  <div className="vote-details">
-                                    <div className="vote-info">
-                                      <span className="label">Candidate:</span>
-                                      <span className="value">{vote.candidateName}</span>
-                                    </div>
-                                    <div className="vote-info">
-                                      <span className="label">Party:</span>
-                                      <span className="value">{vote.candidateParty}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="empty-state">
-                              <p>You haven't participated in any elections yet.</p>
-                              <button onClick={() => navigate("/dashboard")} className="action-btn">
-                                View Available Elections
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-              
-                      {activeTab === "security" && (
-                        <div className="security-card">
-                          <h3><FaLock /> Security Settings</h3>
-                          
-                          <div className="security-info">
-                            <div className="info-group">
-                              <label>Account Created</label>
-                              <p>{securityInfo.accountCreated}</p>
-                            </div>
-                            <div className="info-group">
-                              <label>Last Login</label>
-                              <p>{securityInfo.lastLogin}</p>
-                            </div>
-                            <div className="info-group">
-                              <label>Login Attempts</label>
-                              <p>{securityInfo.loginAttempts}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="security-actions">
-                            <h4>Password Management</h4>
-                            {!showPasswordForm ? (
-                              <button 
-                                onClick={() => setShowPasswordForm(true)} 
-                                className="change-password-btn"
-                              >
-                                Change Password
-                              </button>
-                            ) : (
-                              <form onSubmit={handleChangePassword} className="password-form">
-                                <div className="form-group">
-                                  <label>Current Password</label>
-                                  <div className="password-input-container">
-                                    <input
-                                      type={showPassword.current ? "text" : "password"}
-                                      name="currentPassword"
-                                      value={passwordData.currentPassword}
-                                      onChange={handlePasswordChange}
-                                      required
-                                    />
-                                    <button 
-                                      type="button" 
-                                      className="toggle-password"
-                                      onClick={() => togglePasswordVisibility('current')}
-                                    >
-                                      {showPassword.current ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                  </div>
-                                </div>
-                                
-                                <div className="form-group">
-                                  <label>New Password</label>
-                                  <div className="password-input-container">
-                                    <input
-                                      type={showPassword.new ? "text" : "password"}
-                                      name="newPassword"
-                                      value={passwordData.newPassword}
-                                      onChange={handlePasswordChange}
-                                      required
-                                    />
-                                    <button 
-                                      type="button" 
-                                      className="toggle-password"
-                                      onClick={() => togglePasswordVisibility('new')}
-                                    >
-                                      {showPassword.new ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                  </div>
-                                </div>
-                                
-                                <div className="form-group">
-                                  <label>Confirm New Password</label>
-                                  <div className="password-input-container">
-                                    <input
-                                      type={showPassword.confirm ? "text" : "password"}
-                                      name="confirmPassword"
-                                      value={passwordData.confirmPassword}
-                                      onChange={handlePasswordChange}
-                                      required
-                                    />
-                                    <button 
-                                      type="button" 
-                                      className="toggle-password"
-                                      onClick={() => togglePasswordVisibility('confirm')}
-                                    >
-                                      {showPassword.confirm ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                  </div>
-                                </div>
-                                
-                                <div className="password-requirements">
-                                  <p>Password must:</p>
-                                  <ul>
-                                    <li className={passwordData.newPassword.length >= 6 ? "met" : ""}>
-                                      Be at least 6 characters long
-                                    </li>
-                                    <li className={/[A-Za-z]/.test(passwordData.newPassword) && /[0-9]/.test(passwordData.newPassword) ? "met" : ""}>
-                                      Include both letters and numbers
-                                    </li>
-                                    <li className={passwordData.newPassword === passwordData.confirmPassword && passwordData.newPassword !== "" ? "met" : ""}>
-                                      Passwords match
-                                    </li>
-                                  </ul>
-                                </div>
-                                
-                                <div className="button-group">
-                                  <button 
-                                    type="submit" 
-                                    className="save-btn"
-                                    disabled={passwordLoading}
-                                  >
-                                    {passwordLoading ? (
-                                      <>
-                                        <div className="spinner-small"></div> Changing...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <FaSave /> Update Password
-                                      </>
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowPasswordForm(false);
-                                      setPasswordData({
-                                        currentPassword: "",
-                                        newPassword: "",
-                                        confirmPassword: "",
-                                      });
-                                    }}
-                                    className="cancel-btn"
-                                  >
-                                    <FaTimes /> Cancel
-                                  </button>
-                                </div>
-                              </form>
-                            )}
-                            
-                            <div className="security-tips">
-                              <h4>Security Tips</h4>
-                              <ul>
-                                <li>Use a strong, unique password for your voting account</li>
-                                <li>Never share your login credentials with anyone</li>
-                                <li>Log out when using shared computers</li>
-                                <li>Update your password regularly</li>
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+              {/* Form Details Area */}
+              <div className="md:col-span-2 space-y-4">
+                {isEditing ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1.5 uppercase tracking-wider">Full Name</label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={editedUser.name}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-primary transition-all outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1.5 uppercase tracking-wider">Display Name</label>
+                        <input
+                          type="text"
+                          name="display_name"
+                          value={editedUser.display_name}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-primary transition-all outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1.5 uppercase tracking-wider">Email Address</label>
+                        <input
+                          type="email"
+                          name="email"
+                          value={editedUser.email}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-primary transition-all outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-text-muted mb-1.5 uppercase tracking-wider">Phone Number</label>
+                        <input
+                          type="text"
+                          name="phone"
+                          value={editedUser.phone}
+                          onChange={handleInputChange}
+                          placeholder="e.g. +2348012345678"
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-primary transition-all outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-text-muted mb-1.5 uppercase tracking-wider">Bio / Department Notes</label>
+                      <textarea
+                        name="bio"
+                        rows={3}
+                        value={editedUser.bio}
+                        onChange={handleInputChange}
+                        placeholder="Write a brief bio..."
+                        className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-primary transition-all outline-none resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button 
+                        onClick={handleSaveChanges}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm transition-all flex items-center gap-1.5 shadow cursor-pointer"
+                      >
+                        <FaSave /> Save Changes
+                      </button>
+                      <button 
+                        onClick={() => setIsEditing(false)}
+                        className="px-4 py-2.5 rounded-xl bg-surface-2/40 border border-border text-text hover:bg-surface-2 transition-all text-sm font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
-                );
-              };
-              
-              export default Profile;
-              
+                ) : (
+                  <div className="space-y-6 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div>
+                        <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Full Name</p>
+                        <p className="text-text font-bold mt-1">{user.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Display Name</p>
+                        <p className="text-text font-bold mt-1">{user.display_name || user.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Email Address</p>
+                        <p className="text-text font-bold mt-1">{user.email || "Not specified"}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Phone Number</p>
+                        <p className="text-text font-bold mt-1">{user.phone || "Not specified"}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Voter Serial ID</p>
+                        <p className="text-text font-mono font-bold mt-1">#{user.id}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Matric No. / Staff ID</p>
+                        <p className="text-text font-mono font-bold mt-1">{user.matric_number || user.staff_id || "N/A"}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Bio / Department Notes</p>
+                      <p className="text-text mt-1.5 italic bg-surface-2/20 border border-border/40 p-3.5 rounded-xl leading-relaxed">
+                        {user.bio || "No bio added yet. Tell us a bit about yourself."}
+                      </p>
+                    </div>
+
+                    <button 
+                      onClick={() => setIsEditing(true)}
+                      className="px-4 py-2.5 rounded-xl bg-surface-2/40 border border-border text-text hover:bg-surface-2 transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <FaEdit /> Modify Profile
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "voting-history" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <h3 className="text-text font-bold text-base flex items-center gap-2">
+                  <FaVoteYea className="text-indigo-400" /> Ledger Auditing
+                </h3>
+              </div>
+
+              {participationLoading ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <FaSpinner className="text-3xl text-indigo-500 animate-spin mb-2" />
+                  <p className="text-text-muted text-xs">Querying participation ledger...</p>
+                </div>
+              ) : participationHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {participationHistory.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-surface/20 p-4 rounded-xl border border-border/50 hover:border-border transition-all text-xs">
+                      <div>
+                        <p className="text-text font-semibold text-sm">{item.title}</p>
+                        <p className="text-text-muted text-[10px] mt-0.5">
+                          Timeline: {new Date(item.start_date + "T00:00:00").toLocaleDateString()} — {new Date(item.end_date + "T00:00:00").toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        {item.has_voted ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                            <FaCheckCircle /> Registered Voted
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/25">
+                            <FaTimesCircle /> Missed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FaVoteYea className="text-4xl text-text-muted mx-auto mb-3" />
+                  <p className="text-text-muted text-sm">No ballot records synchronized yet.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <h3 className="text-text font-bold text-base flex items-center gap-2">
+                  <FaLock className="text-indigo-400" /> Account Security Controls
+                </h3>
+              </div>
+
+              {/* Created Date */}
+              {user.created_at && (
+                <div className="text-xs bg-surface/40 border border-border/50 p-4 rounded-xl">
+                  <p className="text-text-muted">Account Created Timestamp</p>
+                  <p className="text-text font-bold mt-0.5">{new Date(user.created_at).toLocaleString()}</p>
+                </div>
+              )}
+
+              {/* Password update form */}
+              <div className="space-y-4">
+                <h4 className="text-text font-bold text-sm">Update Account Credentials</h4>
+                
+                {!showPasswordForm ? (
+                  <button 
+                    onClick={() => setShowPasswordForm(true)}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow"
+                  >
+                    Change Account Password
+                  </button>
+                ) : (
+                  <form onSubmit={handleChangePassword} className="space-y-4 max-w-md animate-slide-in">
+                    <div>
+                      <label className="block text-xs font-semibold text-text-muted mb-1">Current Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword.current ? "text" : "password"}
+                          name="currentPassword"
+                          value={passwordData.currentPassword}
+                          onChange={handlePasswordChange}
+                          className="w-full px-4 py-2 rounded-xl bg-surface border border-border text-text text-xs focus:border-indigo-500 pr-10"
+                          required
+                        />
+                        <button 
+                          type="button" 
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                          onClick={() => togglePasswordVisibility('current')}
+                        >
+                          {showPassword.current ? <FaEyeSlash /> : <FaEye />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-text-muted mb-1">New Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword.new ? "text" : "password"}
+                          name="newPassword"
+                          value={passwordData.newPassword}
+                          onChange={handlePasswordChange}
+                          className="w-full px-4 py-2 rounded-xl bg-surface border border-border text-text text-xs focus:border-indigo-500 pr-10"
+                          required
+                        />
+                        <button 
+                          type="button" 
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                          onClick={() => togglePasswordVisibility('new')}
+                        >
+                          {showPassword.new ? <FaEyeSlash /> : <FaEye />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-text-muted mb-1">Confirm New Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword.confirm ? "text" : "password"}
+                          name="confirmPassword"
+                          value={passwordData.confirmPassword}
+                          onChange={handlePasswordChange}
+                          className="w-full px-4 py-2 rounded-xl bg-surface border border-border text-text text-xs focus:border-indigo-500 pr-10"
+                          required
+                        />
+                        <button 
+                          type="button" 
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                          onClick={() => togglePasswordVisibility('confirm')}
+                        >
+                          {showPassword.confirm ? <FaEyeSlash /> : <FaEye />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button 
+                        type="submit" 
+                        disabled={passwordLoading}
+                        className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-sm transition-all flex items-center gap-1.5 shadow"
+                      >
+                        {passwordLoading ? <FaSpinner className="animate-spin" /> : "Update Password"}
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setShowPasswordForm(false);
+                          setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                        }}
+                        className="px-4 py-2 rounded-xl bg-surface/20 border border-border text-text hover:bg-surface/40 transition-all text-sm font-semibold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Profile;

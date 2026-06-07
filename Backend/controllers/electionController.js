@@ -162,9 +162,24 @@ export const voteForCandidate = async (req, res) => {
 
 export const fetchElections = async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT * FROM elections ORDER BY start_date DESC"
-    );
+    // Use TO_CHAR to return dates as plain 'YYYY-MM-DD' text strings.
+    // Without this, node-postgres converts DATE columns into JS Date objects
+    // which JSON.stringify() turns into UTC ISO strings (e.g. "2026-06-07T00:00:00.000Z").
+    // For UTC+1 users this displays as the previous day (June 6 instead of June 7).
+    const result = await pool.query(`
+      SELECT
+        electionid,
+        title,
+        description,
+        TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+        TO_CHAR(end_date,   'YYYY-MM-DD') AS end_date,
+        start_time,
+        end_time,
+        isactive,
+        created_at
+      FROM elections
+      ORDER BY start_date DESC
+    `);
     res.status(200).json(result.rows);
   } catch (error) {
     console.error("Error fetching elections:", error.message);
@@ -207,12 +222,12 @@ export const addElection = async (req, res) => {
 export const getAllElections = async (req, res) => {
   try {
     const query = `
-      SELECT 
+      SELECT
         electionid,
         title,
         description,
-        start_date,
-        end_date,
+        TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+        TO_CHAR(end_date,   'YYYY-MM-DD') AS end_date,
         isactive,
         created_at
       FROM elections

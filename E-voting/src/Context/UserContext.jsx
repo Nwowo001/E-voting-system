@@ -10,100 +10,86 @@ import { io } from "socket.io-client";
 
 const UserContext = createContext(undefined);
 
+let socketInstance = null;
+
+const getSocket = () => {
+  if (!socketInstance) {
+    socketInstance = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000", {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+    });
+  }
+  return socketInstance;
+};
+
 export const UserProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [socket, setSocket] = useState(null); // WebSocket state
+  const [user, setUserState] = useState(null);
+  const [socket] = useState(() => getSocket());
+  const [theme, setThemeState] = useState(() => {
+    return localStorage.getItem("theme") || "dark";
+  });
 
   const isAdmin = user?.role === "admin";
 
-  // Helper function to retrieve a token from cookies
-  const getCookie = (name) => {
-    const cookie = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith(`${name}=`));
-    return cookie ? decodeURIComponent(cookie.split("=")[1]) : null;
-  };
+  // Effect to toggle DOM class list for theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === "light") {
+      root.classList.add("light");
+      root.classList.remove("dark");
+    } else {
+      root.classList.add("dark");
+      root.classList.remove("light");
+    }
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
-  // Fetch user data based on the token in the cookie
-  const fetchUserFromToken = useCallback(async () => {
+  // On mount, restore user from localStorage
+  useEffect(() => {
     try {
-      const token = getCookie("authToken"); // Retrieve the token from cookies
-      if (!token) return;
-
-      const response = await fetch("http://localhost:5000/api/auth/me", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include", // Ensure cookies are sent with the request
-      });
-
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-
-        // Establish WebSocket connection if authenticated
-        const newSocket = io("http://localhost:5000", {
-          transports: ["websocket", "polling"],
-          reconnection: true,
-        });
-        setSocket(newSocket);
-      } else {
-        console.error("Failed to authenticate user");
-        setUser(null);
+      const token = localStorage.getItem("token");
+      const userData = localStorage.getItem("user");
+      if (token && userData) {
+        const parsed = JSON.parse(userData);
+        setUserState(parsed);
       }
     } catch (err) {
-      console.error("Error fetching user from token:", err);
-      setUser(null);
+      console.error("Error restoring user from localStorage:", err);
+      localStorage.clear();
     }
   }, []);
 
-  const setUserAndPersist = useCallback((userData) => {
+  const setUser = useCallback((userData) => {
     if (userData) {
-      document.cookie = `authToken=${encodeURIComponent(
-        userData.token
-      )}; path=/; Secure; HttpOnly; SameSite=lax`;
-
-      // Establish WebSocket connection
-      const newSocket = io("http://localhost:5000", {
-        transports: ["websocket", "polling"],
-        reconnection: true,
-      });
-      setSocket(newSocket);
+      // Persist to localStorage
+      localStorage.setItem("user", JSON.stringify(userData));
     } else {
-      document.cookie =
-        "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;"; // Clear cookie
-      setSocket(null); // Disconnect the WebSocket
+      // Clear on logout
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
     }
-    setUser(userData);
+    setUserState(userData);
   }, []);
 
   const logout = useCallback(() => {
-    document.cookie =
-      "authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;"; // Clear cookie
-    setUser(null);
-    if (socket) {
-      socket.disconnect(); // Disconnect the WebSocket on logout
-    }
-  }, [socket]);
+    localStorage.clear();
+    setUserState(null);
+    window.location.href = "/login";
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+  }, []);
 
   const value = {
     user,
     isAdmin,
-    socket, // Expose the socket to the app
-    setUser: setUserAndPersist,
+    socket,
+    setUser,
     logout,
+    theme,
+    toggleTheme,
   };
-
-  useEffect(() => {
-    fetchUserFromToken(); // Fetch user data on initial load
-    return () => {
-      if (socket) {
-        socket.disconnect(); // Clean up the WebSocket connection
-      }
-    };
-  }, [fetchUserFromToken, socket]);
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };
