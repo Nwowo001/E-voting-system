@@ -10,6 +10,9 @@ const connectionString = `postgresql://${process.env.DB_USER}:${process.env.DB_P
 
 export const pool = new Pool({
   connectionString: isProduction ? process.env.DATABASE_URL : connectionString,
+  max: 20,                  // max simultaneous DB connections
+  idleTimeoutMillis: 30000, // close idle connections after 30s
+  connectionTimeoutMillis: 5000, // fail fast if no connection available in 5s
 });
 
 pool.on("error", (err) => {

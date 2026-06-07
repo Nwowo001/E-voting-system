@@ -1,144 +1,95 @@
-// userRoutes.js
-import express from "express";
-import { pool } from "../dbConfig.js";
-import multer from "multer";
-import {
-  signUp,
-  login,
-  logout,
-  getUserInfo,
-  uploadProfileImage,
-} from "../controllers/userController.js";
-
-import { adminOnly, authenticateToken } from "../middlewares/authMiddleware.js"; // Ensure this middleware exists
+import express from 'express';
+import { pool } from '../dbConfig.js';
+import path from 'path';
+import { 
+  signUp, 
+  verifyRegistration, 
+  resendOTP, 
+  forgotPassword, 
+  resetPassword, 
+  login, 
+  logout, 
+  getUserInfo, 
+  changePassword, 
+  updateProfile,
+  verifyMatric,
+  upload 
+} from '../controllers/userController.js';
+import { authenticateToken, adminOnly } from '../middlewares/authMiddleware.js';
+import { uploadToSupabase } from '../utils/supabaseService.js';
 
 const router = express.Router();
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/profiles"); // Ensure this folder exists in your project root
-  },
-  filename: (req, file, cb) => {
-    cb(null, `profile_${req.user.id}_${Date.now()}${file.originalname}`);
-  },
-});
 
-const upload = multer({
-  storage: storage,
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only images are allowed"), false);
-    }
-  },
-});
-router.put("/profile", authenticateToken, async (req, res) => {
+router.post('/sign-up', signUp);
+router.post('/verify-matric', verifyMatric);   // public — matric lookup before signup
+router.post('/verify-registration', verifyRegistration);
+router.post('/resend-otp', resendOTP);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
+router.post('/login', login);
+router.post('/logout', logout);
+
+router.post('/update-profile', authenticateToken, updateProfile);
+
+router.post('/upload-profile-image', authenticateToken, upload.single('profileImage'), async (req, res) => {
   try {
-    const userId = req.user.id; // Get user ID from authenticated session
-    const { name, email, display_name } = req.body;
-
-    const result = await pool.query(
-      `UPDATE users 
-       SET name = $1, email = $2, display_name = $3
-       WHERE userid = $4 
-       RETURNING *`,
-      [name, email, display_name, userId]
-    );
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Profile update error:", error);
-    res.status(500).json({ message: "Failed to update profile" });
-  }
-});
-router.post("/update-profile", authenticateToken, async (req, res) => {
-  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
     const userId = req.user.id;
-    const { name, email } = req.body;
-
-    const result = await pool.query(
-      `UPDATE users 
-       SET name = $1, email = $2
-       WHERE id = $3 
-       RETURNING *`,
-      [name, email, userId]
+    
+    // Upload profile image to Supabase (with fallback)
+    const imagePath = await uploadToSupabase(
+      req.file.buffer,
+      `profile_${userId}_${Date.now()}${path.extname(req.file.originalname || '.jpg')}`,
+      req.file.mimetype,
+      "profiles"
     );
 
-    res.json(result.rows[0]);
+    await pool.query('UPDATE users SET profile_image = $1 WHERE id = $2', [imagePath, userId]);
+    res.status(200).json({ message: 'Profile image uploaded successfully', imageUrl: imagePath });
   } catch (error) {
-    res.status(500).json({ message: "Failed to update profile" });
+    console.error('Profile image upload error:', error.message);
+    res.status(500).json({ error: 'Failed to upload profile image' });
   }
 });
 
-router.put("/:id", authenticateToken, async (req, res) => {
+router.get('/user-info', authenticateToken, getUserInfo);
+router.post('/change-password', authenticateToken, changePassword);
+
+// Admin User Management Routes (expected by Voters.jsx)
+router.put('/:id', authenticateToken, adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const { name, email } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
   try {
-    const { id } = req.params;
-    const { name, email, display_name } = req.body;
-
     const result = await pool.query(
-      `UPDATE users 
-       SET name = $1, email = $2, display_name = $3
-       WHERE userid = $4 
-       RETURNING *`,
-      [name, email, display_name, id]
+      'UPDATE users SET name = $1, display_name = $1, email = $2 WHERE id = $3 RETURNING *',
+      [name, email, id]
     );
-
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ error: 'User not found' });
     }
-
-    res.json(result.rows[0]);
+    res.status(200).json({ message: 'User updated successfully', user: result.rows[0] });
   } catch (error) {
-    res.status(500).json({ message: "Error updating user profile" });
+    console.error('Error updating user:', error.message);
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
-router.post("/sign-up", signUp); // Register a new user
-router.post("/login", login); // User login
-router.post("/logout", logout);
-router.post(
-  "/upload-profile-image",
-  authenticateToken,
-  upload.single("profileImage"), // Ensure field name matches frontend
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const userId = req.user.id;
-      const imagePath = `/uploads/profiles/${req.file.filename}`;
-
-      // Update database with image path
-      await pool.query(
-        "UPDATE users SET profile_image = $1 WHERE id = $2 RETURNING profile_image",
-        [imagePath, userId]
-      );
-
-      res.status(200).json({
-        message: "Profile image uploaded successfully",
-        imageUrl: imagePath,
-      });
-    } catch (error) {
-      console.error("Profile image upload error:", error.message);
-      res.status(500).json({ error: "Failed to upload profile image" });
+router.delete('/:id', authenticateToken, adminOnly, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
     }
+    res.status(200).json({ message: 'User deleted successfully', user: result.rows[0] });
+  } catch (error) {
+    console.error('Error deleting user:', error.message);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
-);
-
-// router.post("/logout", authenticateToken, (req, res) => {
-//   try {
-//     // Clear the user session or token
-//     res.clearCookie("connect.sid"); // Clear the session cookie
-//     res.clearCookie("authToken"); // Clear JWT token if used in cookies
-//     req.session.destroy(() => {
-//       res.status(200).json({ message: "Logout successful" });
-//     });
-//   } catch (error) {
-//     console.error("Logout error:", error.message);
-//     res.status(500).json({ error: "Logout failed" });
-//   }
-// });
-router.get("/user-info", authenticateToken, getUserInfo); // Get user information, protected by auth
+});
 
 export default router;

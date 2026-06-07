@@ -25,9 +25,10 @@ app.use(
   session({
     secret: process.env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: {
       secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
       maxAge: 3600000,
     },
   })
@@ -47,7 +48,7 @@ const __dirname = path.dirname(__filename);
 // Configure CORS before any routes
 app.use(
   cors({
-    origin: true,
+    origin: FRONTEND_URL,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -99,7 +100,6 @@ app.use("/api/users", userRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/voters", votersRoutes);
 app.use("/api/auth", adminRoutes);
-app.use("/api", votersRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Default Route

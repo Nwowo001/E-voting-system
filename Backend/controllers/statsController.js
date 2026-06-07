@@ -27,8 +27,8 @@ export const getAllElectionsStats = async (req, res) => {
         e.electionid,
         e.title,
         e.description,
-        e.start_date,
-        e.end_date,
+        TO_CHAR(e.start_date, 'YYYY-MM-DD') AS start_date,
+        TO_CHAR(e.end_date, 'YYYY-MM-DD') AS end_date,
         e.isactive,
         COUNT(DISTINCT v.voteid) as total_votes,
         COUNT(DISTINCT c.candidateid) as candidate_count
@@ -113,7 +113,15 @@ export const getElectionStats = async (req, res) => {
       return res.status(404).json({ message: "Election not found" });
     }
 
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    res.json({
+      title: row.title,
+      description: row.description,
+      totalVoters: parseInt(row.total_voters) || 0,
+      totalVotes: parseInt(row.total_votes) || 0,
+      voterTurnout: parseFloat(row.voter_turnout) || 0,
+      candidates: row.candidates || []
+    });
   } catch (error) {
     console.error("Error fetching election stats:", error);
     res.status(500).json({ error: error.message });

@@ -14,6 +14,7 @@ import {
   fetchCandidatesByElection,
   updateCandidate,
   deleteCandidate,
+  uploadCandidatePicture,
 } from "../controllers/candidateController.js";
 import {
   getUserVotes,
@@ -21,23 +22,26 @@ import {
   getVotes,
 } from "../controllers/votesController.js";
 import { getAuditLogs } from "../controllers/auditController.js";
-import { getVoteCounts } from "../controllers/statsController.js";
 import { pool } from "../dbConfig.js";
-import { logout } from "../controllers/userController.js";
+import {
+  logout,
+  createStaffUser,
+  changePassword,
+} from "../controllers/userController.js";
+
 const router = express.Router();
 
 // Election Management
 router.get("/elections/:electionId/time-remaining", getElectionTimeRemaining);
-
 router.post("/elections", authenticateToken, adminOnly, createElection);
-router.get("/elections", authenticateToken, adminOnly, fetchElections);
+router.get("/elections", authenticateToken, fetchElections);
 router.put("/elections/:id", authenticateToken, adminOnly, updateElection);
 router.delete("/elections/:id", authenticateToken, adminOnly, deleteElection);
 router.get(
   "/elections/:id/results",
   authenticateToken,
   adminOnly,
-  fetchElectionResults
+  fetchElectionResults,
 );
 router.put(
   "/elections/:id/activate",
@@ -48,80 +52,94 @@ router.put(
       const { id } = req.params;
       const result = await pool.query(
         "UPDATE elections SET isactive = true WHERE electionid = $1 RETURNING *",
-        [id]
+        [id],
       );
-
-      if (result.rows.length === 0) {
+      if (result.rows.length === 0)
         return res.status(404).json({ error: "Election not found" });
-      }
-
-      if (global.io) {
-        global.io.emit("election_updated", result.rows[0]); // Notify clients via Socket.IO
-      }
-
+      if (req.io) req.io.emit("election_updated", result.rows[0]);
       res.status(200).json({ success: true, election: result.rows[0] });
     } catch (error) {
       console.error("Error activating election:", error.message);
       res.status(500).json({ error: "Failed to activate election" });
     }
-  }
+  },
 );
 
 // Candidate Management
-router.get("/candidates", getCandidates); // Accessible by all
-router.get("/candidates/:electionId", fetchCandidatesByElection); // Public route for election candidates
-router.post("/candidates", authenticateToken, adminOnly, addCandidate);
-router.put("/candidates/:id", authenticateToken, adminOnly, updateCandidate);
-router.delete("/candidates/:id", authenticateToken, adminOnly, deleteCandidate);
+router.get("/candidates", getCandidates);
+router.get("/candidates/:electionId", fetchCandidatesByElection);
+router.post(
+  "/candidates",
+  authenticateToken,
+  adminOnly,
+  uploadCandidatePicture,
+  addCandidate,
+);
+router.put(
+  "/candidates/:candidateId",
+  authenticateToken,
+  adminOnly,
+  updateCandidate,
+);
+router.delete(
+  "/candidates/:candidateId",
+  authenticateToken,
+  adminOnly,
+  deleteCandidate,
+);
 
 // Voter and Vote Management
-router.get("/votes", authenticateToken, adminOnly, getVotes); // Admin can view votes for transparency
-router.get("/votes/user/:userId", getUserVotes);
+router.get("/votes", authenticateToken, adminOnly, getVotes);
+router.get("/votes/user/:userId", authenticateToken, adminOnly, getUserVotes);
+
+// Admin creates staff/admin user
+router.post("/create-user", authenticateToken, adminOnly, createStaffUser);
 
 // Dashboard Stats
-router.get("/dashboard-stats", async (req, res) => {
-  try {
-    const stats = await getVoteCounts();
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+router.get(
+  "/dashboard-stats",
+  authenticateToken,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const [votersRes, electionsRes, votesRes] = await Promise.all([
+        pool.query("SELECT COUNT(*) FROM users WHERE role = 'voter'"),
+        pool.query(
+          "SELECT COUNT(*) FILTER (WHERE isactive = true) as active, COUNT(*) as total FROM elections",
+        ),
+        pool.query("SELECT COUNT(*) FROM votes"),
+      ]);
+      res.json({
+        totalVoters: parseInt(votersRes.rows[0].count),
+        activeElections: parseInt(electionsRes.rows[0].active),
+        totalElections: parseInt(electionsRes.rows[0].total),
+        totalVotes: parseInt(votesRes.rows[0].count),
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
 
 router.post("/logout", logout);
+
 // Authenticated User Info
-router.get("/me", authenticateToken, (req, res) => {
-  const user = req.user;
-  if (!req.session.user) {
-    return res.status(404).json({ message: "User not found" });
-  }
-  res.json(user);
-});
-router.get("/auth/me", authenticateToken, async (req, res) => {
+router.get("/me", authenticateToken, async (req, res) => {
   try {
-    // Since we're using JWT, req.user is already decoded from the token
     const userQuery = await pool.query(
-      "SELECT id, name, email, voter_id, role FROM users WHERE id = $1",
-      [req.user.id]
+      "SELECT id, name, email, matric_number, staff_id, role, display_name, profile_image, phone, bio, is_verified, created_at FROM users WHERE id = $1",
+      [req.user.id],
     );
-
-    if (userQuery.rows.length === 0) {
+    if (userQuery.rows.length === 0)
       return res.status(404).json({ message: "User not found" });
-    }
-
-    // Return user data without sensitive information
     const userData = userQuery.rows[0];
-    res.json({
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      voterId: userData.voter_id,
-      role: userData.role,
-    });
+    res.json(userData);
   } catch (error) {
     console.error("Session fetch error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
+router.post("/change-password", authenticateToken, changePassword);
 
 export default router;

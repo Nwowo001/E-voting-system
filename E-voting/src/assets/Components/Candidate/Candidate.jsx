@@ -17,9 +17,9 @@ import {
   FaDownload,
   FaFlag,
   FaEye,
-  FaUser
+  FaUser,
+  FaSpinner
 } from "react-icons/fa";
-import "./Candidate.css";
 
 const API_URL = "http://localhost:5000/api";
 
@@ -33,24 +33,21 @@ const Candidate = () => {
     picture: null,
     manifesto: "",
     position: "",
-    biography: ""
+    biography: "",
+    matricNumber: ""
   });
   const [picturePreview, setPicturePreview] = useState(null);
   const [elections, setElections] = useState([]);
   const [editCandidateId, setEditCandidateId] = useState(null);
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterElection, setFilterElection] = useState("");
-  const [filterParty, setFilterParty] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [viewCandidateId, setViewCandidateId] = useState(null);
   const [candidateStats, setCandidateStats] = useState({});
-  const [parties, setParties] = useState([]);
   const formRef = useRef(null);
 
   useEffect(() => {
@@ -58,11 +55,7 @@ const Candidate = () => {
     fetchElections();
   }, []);
 
-  // Extract unique parties from candidates for filtering
-  useEffect(() => {
-    const uniqueParties = [...new Set(candidates.map(candidate => candidate.party))];
-    setParties(uniqueParties);
-  }, [candidates]);
+
 
   const fetchCandidates = async () => {
     try {
@@ -74,7 +67,6 @@ const Candidate = () => {
       setCandidates(response.data);
     } catch (err) {
       toast.error("Failed to fetch candidates.");
-      setError("Failed to fetch candidates.");
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +81,6 @@ const Candidate = () => {
       setElections(response.data);
     } catch (err) {
       toast.error("Failed to fetch elections.");
-      setError("Failed to fetch elections.");
     }
   };
 
@@ -105,50 +96,85 @@ const Candidate = () => {
         [candidateId]: response.data
       }));
       
-      setViewCandidateId(candidateId);
+      setViewCandidateId(viewCandidateId === candidateId ? null : candidateId);
     } catch (error) {
-      console.error("Error fetching candidate stats:", error.message);
       toast.error("Failed to load candidate statistics.");
     }
   };
 
-  const handleFileChange = (e) => {
+  const compressImage = (file, maxWidth, maxHeight, quality) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                reject(new Error("Canvas to blob conversion failed"));
+              }
+            },
+            "image/jpeg",
+            quality
+          );
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error("Image size should be less than 5MB");
-        return;
-      }
-      
-      setNewCandidate({ ...newCandidate, picture: file });
       setPicturePreview(URL.createObjectURL(file));
+      
+      try {
+        const compressedFile = await compressImage(file, 600, 600, 0.75);
+        setNewCandidate({ ...newCandidate, picture: compressedFile });
+        setPicturePreview(URL.createObjectURL(compressedFile));
+      } catch (err) {
+        console.error("Compression failed, using original file:", err);
+        setNewCandidate({ ...newCandidate, picture: file });
+      }
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    setSuccessMessage("");
     
-    // Validate form fields
-    if (!newCandidate.name.trim()) {
-      toast.error("Candidate name is required");
-      setError("Candidate name is required");
-      return;
-    }
-    if (!newCandidate.party.trim()) {
-      toast.error("Party is required");
-      setError("Party is required");
-      return;
-    }
-    if (!newCandidate.electionId) {
-      toast.error("Please select an election");
-      setError("Please select an election");
-      return;
-    }
-    if (!editCandidateId && !newCandidate.picture) {
-      toast.error("Please upload a candidate picture");
-      setError("Please upload a candidate picture");
+    if (!editCandidateId && !newCandidate.matricNumber.trim()) {
+      toast.error("Matric number is required to map a user account.");
       return;
     }
     
@@ -158,6 +184,7 @@ const Candidate = () => {
     formData.append("name", newCandidate.name);
     formData.append("party", newCandidate.party);
     formData.append("electionId", newCandidate.electionId);
+    formData.append("matricNumber", newCandidate.matricNumber);
     formData.append("position", newCandidate.position || "");
     formData.append("manifesto", newCandidate.manifesto || "");
     formData.append("biography", newCandidate.biography || "");
@@ -173,20 +200,17 @@ const Candidate = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         toast.success("Candidate updated successfully!");
-        setSuccessMessage("Candidate updated successfully!");
       } else {
         await axios.post(`${API_URL}/candidates`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        toast.success("Candidate added successfully!");
-        setSuccessMessage("Candidate added successfully!");
+        toast.success("Candidate added and user account provisioned successfully!");
       }
       fetchCandidates();
       resetForm();
       setShowForm(false);
     } catch (err) {
       toast.error("An error occurred while saving the candidate.");
-      setError("An error occurred while saving the candidate.");
     } finally {
       setIsLoading(false);
     }
@@ -200,12 +224,11 @@ const Candidate = () => {
       picture: null,
       manifesto: "",
       position: "",
-      biography: ""
+      biography: "",
+      matricNumber: ""
     });
     setPicturePreview(null);
     setEditCandidateId(null);
-    setError("");
-    setSuccessMessage("");
   };
 
   const handleCancel = () => {
@@ -215,8 +238,6 @@ const Candidate = () => {
 
   const handleEdit = (candidate) => {
     setShowForm(true);
-    
-    // Scroll to form
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -229,12 +250,9 @@ const Candidate = () => {
       position: candidate.position || "",
       manifesto: candidate.manifesto || "",
       biography: candidate.biography || "",
-      picture: null, // Reset picture since we don't need to edit it immediately
+      picture: null,
+      matricNumber: candidate.matric_number || ""
     });
-    
-    // Clear any existing messages
-    setError("");
-    setSuccessMessage("");
   };
 
   const handleDisqualify = async (candidateId) => {
@@ -250,45 +268,23 @@ const Candidate = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success("Candidate disqualified successfully!");
-      setSuccessMessage("Candidate disqualified successfully!");
       fetchCandidates();
     } catch (err) {
       toast.error("Failed to disqualify candidate.");
-      setError("Failed to disqualify candidate.");
     } finally {
       setDeleteLoading(null);
       setConfirmDelete(null);
     }
   };
 
-  const toggleForm = () => {
-    setShowForm(!showForm);
-    if (!showForm) {
-      resetForm();
-      setTimeout(() => {
-        formRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }
-  };
-
-  // Export candidate profile
   const exportCandidateProfile = (candidate) => {
-    // Create text content for export
-    let content = "data:text/plain;charset=utf-8,";
-    content += `CANDIDATE PROFILE\n`;
-    content += `=================\n\n`;
-    content += `Name: ${candidate.name}\n`;
-    content += `Party: ${candidate.party}\n`;
-    content += `Position: ${candidate.position || "N/A"}\n`;
-    content += `Election: ${elections.find(e => e.electionid === candidate.electionid)?.title || "Unknown"}\n\n`;
-    content += `Biography:\n${candidate.biography || "No biography provided."}\n\n`;
-    content += `Manifesto:\n${candidate.manifesto || "No manifesto provided."}\n\n`;
+    let content = `CANDIDATE PROFILE\n=================\n\nName: ${candidate.name}\nPosition: ${candidate.position || "N/A"}\nElection: ${elections.find(e => e.electionid === candidate.electionid)?.title || "Unknown"}\n\nBiography:\n${candidate.biography || "No biography provided."}\n\nManifesto:\n${candidate.manifesto || "No manifesto provided."}\n`;
     
-    // Create download link
-    const encodedUri = encodeURI(content);
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `candidate_profile_${candidate.name.replace(/\s+/g, '_')}.txt`);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${candidate.name.replace(/\s+/g, '_')}_profile.txt`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -296,53 +292,25 @@ const Candidate = () => {
     toast.success("Candidate profile exported successfully!");
   };
 
-  // Sort candidates
-  const requestSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  // Get sorted and filtered candidates
   const getSortedCandidates = () => {
-    const filteredCandidates = candidates.filter(candidate => {
-      // Apply search filter
+    const filtered = candidates.filter(candidate => {
       const matchesSearch = 
-        candidate.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        candidate.party.toLowerCase().includes(searchTerm.toLowerCase());
+        candidate.name.toLowerCase().includes(searchTerm.toLowerCase());
       
-      // Apply election filter
       const matchesElection = filterElection ? candidate.electionid === parseInt(filterElection) : true;
       
-      // Apply party filter
-      const matchesParty = filterParty ? candidate.party === filterParty : true;
-      
-      return matchesSearch && matchesElection && matchesParty;
+      return matchesSearch && matchesElection;
     });
     
-    // Apply sorting
-    return [...filteredCandidates].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (sortConfig.key === 'election') {
-        const electionA = elections.find(e => e.electionid === a.electionid)?.title || '';
-        const electionB = elections.find(e => e.electionid === b.electionid)?.title || '';
-        
-        if (electionA < electionB) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (electionA > electionB) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
+        const titleA = elections.find(e => e.electionid === a.electionid)?.title || '';
+        const titleB = elections.find(e => e.electionid === b.electionid)?.title || '';
+        return sortConfig.direction === 'asc' ? titleA.localeCompare(titleB) : titleB.localeCompare(titleA);
       } else {
-        if (a[sortConfig.key] < b[sortConfig.key]) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (a[sortConfig.key] > b[sortConfig.key]) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
+        const valA = a[sortConfig.key] || '';
+        const valB = b[sortConfig.key] || '';
+        return sortConfig.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
       }
     });
   };
@@ -350,93 +318,88 @@ const Candidate = () => {
   const sortedCandidates = getSortedCandidates();
 
   return (
-    <div className="candidate-container">
-      <ToastContainer position="top-right" autoClose={3000} />
+    <div className="space-y-6">
+      <ToastContainer position="top-right" autoClose={3000} theme="dark" />
       
-      <div className="candidate-header">
-        <h3><FaUserTie className="header-icon" /> Manage Candidates</h3>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-text flex items-center gap-2">
+            <FaUserTie className="text-indigo-500" /> Election Contenders
+          </h2>
+          <p className="text-text-muted text-sm">Register ballot candidates, attach party names, and publish biography/manifesto logs</p>
+        </div>
+        
         <button 
-          className="toggle-form-button"
-          onClick={toggleForm}
+          onClick={() => {
+            setShowForm(!showForm);
+            if (showForm) resetForm();
+            setTimeout(() => {
+              formRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }}
+          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
         >
-          {showForm ? (
-            <>
-              <FaTimes style={{marginRight: '8px'}} /> Hide Form
-            </>
-          ) : (
-            <>
-              <FaPlus style={{marginRight: '8px'}} /> Add Candidate
-            </>
-          )}
+          {showForm ? <><FaTimes /> Close Form</> : <><FaPlus /> Add Candidate</>}
         </button>
       </div>
 
-      {/* Candidate Form */}
+      {/* Candidate Add/Edit Form */}
       {showForm && (
-        <div className="candidate-form-container" ref={formRef}>
-          <div className="form-header">
-            <h3>{editCandidateId ? "Edit Candidate" : "Add New Candidate"}</h3>
-          </div>
+        <div ref={formRef} className="bg-surface/20 border border-border rounded-2xl p-6 backdrop-blur-xl animate-slide-in">
+          <h3 className="text-lg font-bold text-text mb-4">
+            {editCandidateId ? "Modify Candidate Profile" : "Register New Candidate Contender"}
+          </h3>
           
-          <form className="candidate-form" onSubmit={handleSubmit}>
-            <div className="form-grid">
-              <div className="input-group">
-                <label htmlFor="name">
-                  <FaUser style={{marginRight: '8px', color: '#3498db'}} /> Candidate Name
-                </label>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Full Name *</label>
                 <input
-                  id="name"
                   type="text"
-                  placeholder="Candidate Name"
+                  placeholder="e.g. Comrade Michael Bello"
                   value={newCandidate.name}
-                  onChange={(e) =>
-                    setNewCandidate({ ...newCandidate, name: e.target.value })
-                  }
+                  onChange={(e) => setNewCandidate({ ...newCandidate, name: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-indigo-500 transition-all"
+                  required
                 />
               </div>
-              
-              <div className="input-group">
-                <label htmlFor="party">
-                  <FaFlag style={{marginRight: '8px', color: '#3498db'}} /> Party
-                </label>
+
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Matric Number / Student ID *</label>
                 <input
-                  id="party"
                   type="text"
-                  placeholder="Party"
-                  value={newCandidate.party}
-                  onChange={(e) =>
-                    setNewCandidate({ ...newCandidate, party: e.target.value })
-                  }
+                  placeholder="e.g. CSC/2021/001"
+                  value={newCandidate.matricNumber}
+                  onChange={(e) => setNewCandidate({ ...newCandidate, matricNumber: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-indigo-500 transition-all"
+                  required
+                  disabled={!!editCandidateId}
                 />
               </div>
-              
-              <div className="input-group">
-                <label htmlFor="position">
-                  <FaUserTie style={{marginRight: '8px', color: '#3498db'}} /> Position
-                </label>
+
+
+
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Target Position / Seat</label>
                 <input
-                  id="position"
                   type="text"
-                  placeholder="Position (e.g., President, Governor)"
+                  placeholder="e.g. Faculty President"
                   value={newCandidate.position}
-                  onChange={(e) =>
-                    setNewCandidate({ ...newCandidate, position: e.target.value })
-                  }
+                  onChange={(e) => setNewCandidate({ ...newCandidate, position: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-indigo-500 transition-all"
                 />
               </div>
-              
-              <div className="input-group">
-                <label htmlFor="election">
-                  <FaChartBar style={{marginRight: '8px', color: '#3498db'}} /> Election
-                </label>
+
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Select Active Campaign Ballot *</label>
                 <select
-                  id="election"
                   value={newCandidate.electionId}
-                  onChange={(e) =>
-                    setNewCandidate({ ...newCandidate, electionId: e.target.value })
-                  }
+                  onChange={(e) => setNewCandidate({ ...newCandidate, electionId: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-indigo-500 transition-all cursor-pointer"
+                  required
                 >
-                  <option value="">Select Election</option>
+                  <option value="">Select Target Election</option>
                   {elections.map((election) => (
                     <option key={election.electionid} value={election.electionid}>
                       {election.title}
@@ -444,115 +407,90 @@ const Candidate = () => {
                   ))}
                 </select>
               </div>
-              
-              <div className="input-group full-width">
-                <label htmlFor="picture">
-                  <FaUser style={{marginRight: '8px', color: '#3498db'}} /> Candidate Picture
-                </label>
-                <div className="file-input-container">
-                  <input
-                    id="picture"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="file-input"
-                  />
-                  <div className="file-input-label">
-                    {picturePreview ? "Change Picture" : "Choose Picture"}
-                  </div>
-                </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Profile Photo Upload *</label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="block w-full text-sm text-text-muted file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-600/10 file:text-indigo-400 hover:file:bg-indigo-600/20 cursor-pointer"
+                  required={!editCandidateId}
+                />
                 {picturePreview && (
-                  <div className="picture-preview">
-                    <img src={picturePreview} alt="Preview" />
+                  <div className="w-16 h-16 rounded-xl overflow-hidden border border-white/15">
+                    <img src={picturePreview} alt="Preview" className="w-full h-full object-cover" />
                   </div>
                 )}
               </div>
-              
-              <div className="input-group full-width">
-                <label htmlFor="biography">
-                  <FaUser style={{marginRight: '8px', color: '#3498db'}} /> Biography
-                </label>
-                <textarea
-                  id="biography"
-                  placeholder="Candidate Biography"
-                  value={newCandidate.biography}
-                  onChange={(e) =>
-                    setNewCandidate({ ...newCandidate, biography: e.target.value })
-                  }
-                  rows={4}
-                ></textarea>
-              </div>
-              
-              <div className="input-group full-width">
-                <label htmlFor="manifesto">
-                  <FaFlag style={{marginRight: '8px', color: '#3498db'}} /> Manifesto
-                </label>
-                <textarea
-                  id="manifesto"
-                  placeholder="Candidate Manifesto"
-                  value={newCandidate.manifesto}
-                  onChange={(e) =>
-                    setNewCandidate({ ...newCandidate, manifesto: e.target.value })
-                  }
-                  rows={4}
-                ></textarea>
-              </div>
             </div>
-            
-            {error && <div className="error-message">{error}</div>}
-            {successMessage && <div className="success-message">{successMessage}</div>}
-            
-            <div className="form-actions">
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Biography / Personal Statement</label>
+              <textarea
+                placeholder="Write candidate's academic and political background..."
+                value={newCandidate.biography}
+                onChange={(e) => setNewCandidate({ ...newCandidate, biography: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-indigo-500 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Manifesto Proposals</label>
+              <textarea
+                placeholder="Write the candidate's core manifesto goals..."
+                value={newCandidate.manifesto}
+                onChange={(e) => setNewCandidate({ ...newCandidate, manifesto: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-2.5 rounded-xl bg-surface border border-border text-text text-sm focus:border-indigo-500 transition-all"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
               <button 
                 type="button" 
-                className="cancel-button"
                 onClick={handleCancel}
                 disabled={isLoading}
+                className="px-4 py-2 rounded-xl bg-surface/20 border border-border text-text-muted hover:bg-surface/40 transition-all text-sm font-semibold"
               >
-                <FaTimes style={{marginRight: '8px'}} /> Cancel
+                Cancel
               </button>
               
               <button 
                 type="submit" 
-                className="submit-button"
                 disabled={isLoading}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white transition-all text-sm font-semibold flex items-center gap-2"
               >
-                {isLoading ? (
-                  <div className="button-loader"></div>
-                ) : editCandidateId ? (
-                  <>
-                    <FaCheck style={{marginRight: '8px'}} /> Update Candidate
-                  </>
-                ) : (
-                  <>
-                    <FaCheck style={{marginRight: '8px'}} /> Add Candidate
-                  </>
-                )}
+                {isLoading ? <FaSpinner className="animate-spin" /> : editCandidateId ? "Update Candidate" : "Register Candidate"}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Filters and Search */}
-      <div className="candidate-filters">
-        <div className="search-box">
-          <FaSearch className="search-icon" />
+      {/* Filters bar */}
+      <div className="bg-surface/20 border border-border rounded-2xl p-4 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="relative flex-1">
+          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             type="text"
-            placeholder="Search candidates..."
+            placeholder="Search candidates by name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-surface/60 border border-border/50 text-text placeholder-slate-400 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
           />
         </div>
         
-        <div className="filter-options">
-          <div className="filter-group">
-            <FaFilter style={{marginRight: '8px'}} />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <FaFilter className="text-text-muted text-xs" />
             <select
               value={filterElection}
               onChange={(e) => setFilterElection(e.target.value)}
-              className="filter-select"
+              className="px-3 py-2 rounded-xl bg-surface border border-border/50 text-text text-xs cursor-pointer"
             >
               <option value="">All Elections</option>
               {elections.map((election) => (
@@ -562,236 +500,177 @@ const Candidate = () => {
               ))}
             </select>
           </div>
-          
-          <div className="filter-group">
-            <FaFlag style={{marginRight: '8px'}} />
-            <select
-              value={filterParty}
-              onChange={(e) => setFilterParty(e.target.value)}
-              className="filter-select"
-            >
-              <option value="">All Parties</option>
-              {parties.map((party) => (
-                <option key={party} value={party}>
-                  {party}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="filter-group">
-            <FaSort style={{marginRight: '8px'}} />
-            <select
-              value={`${sortConfig.key}-${sortConfig.direction}`}
-              onChange={(e) => {
-                const [key, direction] = e.target.value.split('-');
-                setSortConfig({ key, direction });
-              }}
-              className="filter-select"
-            >
-              <option value="name-asc">Name (A-Z)</option>
-              <option value="name-desc">Name (Z-A)</option>
-              <option value="party-asc">Party (A-Z)</option>
-              <option value="party-desc">Party (Z-A)</option>
-              <option value="election-asc">Election (A-Z)</option>
-              <option value="election-desc">Election (Z-A)</option>
-            </select>
-          </div>
         </div>
       </div>
 
-      {/* Candidates List */}
+      {/* Candidate Cards Grid */}
       {isLoading && !candidates.length ? (
-        <div className="loading-container">
-          <div className="loader"></div>
-          <p>Loading candidates...</p>
+        <div className="flex flex-col items-center justify-center py-20 bg-surface/20 border border-border rounded-2xl">
+          <FaSpinner className="text-4xl text-indigo-500 animate-spin mb-3" />
+          <p className="text-text-muted text-sm">Syncing candidate profiles...</p>
         </div>
       ) : sortedCandidates.length === 0 ? (
-        <div className="no-candidates">
-          <FaUserTie className="no-data-icon" />
-          <p>No candidates found. Add a new candidate to get started.</p>
+        <div className="text-center py-16 bg-surface/20 border border-border rounded-2xl">
+          <FaUserTie className="text-5xl text-slate-600 mx-auto mb-3" />
+          <h3 className="text-text font-bold text-base mb-1">No contenders registered</h3>
+          <p className="text-text-muted text-sm">Add a candidate using the button above to begin scheduling campaigns.</p>
         </div>
       ) : (
-        <div className="candidates-grid">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {sortedCandidates.map((candidate) => (
             <div 
               key={candidate.candidateid} 
-              className={`candidate-card ${viewCandidateId === candidate.candidateid ? 'expanded' : ''}`}
+              className="bg-surface/20 border border-border rounded-2xl p-5 backdrop-blur-xl hover:border-border/80 transition-all flex flex-col justify-between space-y-4"
             >
-              <div className="candidate-image">
-                {candidate.image_url ? (
-                  <img 
-                    src={candidate.image_url.startsWith('http') 
-                      ? candidate.image_url 
-                      : `http://localhost:5000${candidate.image_url.startsWith('/') ? '' : '/'}${candidate.image_url}`} 
-                    alt={candidate.name} 
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.style.display = 'none';
-                      const placeholder = document.createElement('div');
-                      placeholder.className = 'placeholder-image';
-                      placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="48" height="48"><path fill="currentColor" d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-16.7c-22.2 10.2-46.9 16-72.9 16s-50.6-5.8-72.9-16h-16.7C60.2 288 0 348.2 0 422.4V464c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48v-41.6c0-74.2-60.2-134.4-134.4-134.4z"></path></svg>';
-                      e.target.parentNode.appendChild(placeholder);
-                    }}
-                  />
-                ) : (
-                  <div className="placeholder-image">
-                  <FaUserTie size={48} />
-                </div>
-                
-                )}
-              </div>
-              
-              <div className="candidate-info">
-                <h3 className="candidate-name">{candidate.name}</h3>
-                <div className="candidate-party">{candidate.party}</div>
-                <div className="candidate-election">
-                  {elections.find(e => e.electionid === candidate.electionid)?.title || "Unknown Election"}
-                </div>
-                {candidate.position && (
-                  <div className="candidate-position">{candidate.position}</div>
-                )}
-              </div>
-              
-              <div className="candidate-actions">
-  <button
-    className="view-btn"
-    onClick={() => setViewCandidateId(viewCandidateId === candidate.candidateid ? null : candidate.candidateid)}
-    title="View Details"
-  >
-    <FaEye className="action-icon" />
-    <span className="action-text">View</span>
-  </button>
-  
-  <button
-    className="stats-btn"
-    onClick={() => fetchCandidateStats(candidate.candidateid)}
-    title="View Statistics"
-  >
-    <FaChartBar className="action-icon" />
-    <span className="action-text">Stats</span>
-  </button>
-  
-  <button
-    className="export-btn"
-    onClick={() => exportCandidateProfile(candidate)}
-    title="Export Profile"
-  >
-    <FaDownload className="action-icon" />
-    <span className="action-text">Export</span>
-  </button>
-  
-  <button
-    className="edit-btn"
-    onClick={() => handleEdit(candidate)}
-    title="Edit Candidate"
-  >
-    <FaEdit className="action-icon" />
-    <span className="action-text">Edit</span>
-  </button>
-  
-  <button
-    className={`delete-btn ${confirmDelete === candidate.candidateid ? 'confirm' : ''}`}
-    onClick={() => handleDisqualify(candidate.candidateid)}
-    disabled={deleteLoading === candidate.candidateid}
-    title={confirmDelete === candidate.candidateid ? "Confirm Disqualify" : "Disqualify Candidate"}
-  >
-    {deleteLoading === candidate.candidateid ? (
-      <div className="button-loader"></div>
-    ) : confirmDelete === candidate.candidateid ? (
-      <FaCheck className="action-icon" />
-    ) : (
-      <FaTrash className="action-icon" />
-    )}
-    <span className="action-text">
-      {confirmDelete === candidate.candidateid ? "Confirm" : "Disqualify"}
-    </span>
-  </button>
-</div>
-
-              
-              {/* Expanded View */}
-              {viewCandidateId === candidate.candidateid && (
-                <div className="candidate-details">
-                  <div className="details-section">
-                    <h4>Candidate Details</h4>
-                    
-                    <div className="details-grid">
-                      <div className="detail-item">
-                        <span className="detail-label">Full Name:</span>
-                        <span className="detail-value">{candidate.name}</span>
+              {/* Top Meta info */}
+              <div className="space-y-3">
+                <div className="aspect-square w-full rounded-xl overflow-hidden bg-gradient-to-br from-indigo-500/10 to-violet-500/10 relative border border-border/50">
+                  {candidate.image_url ? (
+                    <>
+                      <img 
+                        src={
+                          // Supabase URLs start with https:// — use them directly.
+                          // Only prepend the local server for relative /uploads/... paths.
+                          candidate.image_url.startsWith('http')
+                            ? candidate.image_url
+                            : `http://localhost:5000${candidate.image_url}`
+                        }
+                        alt={candidate.name} 
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-opacity duration-300"
+                        onLoad={(e) => {
+                          e.target.style.opacity = 1;
+                          const spinner = e.target.parentNode.querySelector('.image-spinner');
+                          if (spinner) spinner.style.display = "none";
+                        }}
+                        style={{ opacity: 0 }}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                          const spinner = e.target.parentNode.querySelector('.image-spinner');
+                          if (spinner) spinner.style.display = "none";
+                          const fallback = e.target.parentNode.querySelector('.fallback-avatar');
+                          if (fallback) fallback.style.display = "flex";
+                        }}
+                      />
+                      <div className="image-spinner absolute inset-0 flex items-center justify-center bg-surface/20">
+                        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                       </div>
-                      
-                      <div className="detail-item">
-                        <span className="detail-label">Party:</span>
-                        <span className="detail-value">{candidate.party}</span>
+                      <div className="fallback-avatar hidden absolute inset-0 flex items-center justify-center bg-surface/60 text-4xl text-slate-500">
+                        👤
                       </div>
-                      
-                      <div className="detail-item">
-                        <span className="detail-label">Position:</span>
-                        <span className="detail-value">{candidate.position || "Not specified"}</span>
-                      </div>
-                      
-                      <div className="detail-item">
-                        <span className="detail-label">Election:</span>
-                        <span className="detail-value">
-                          {elections.find(e => e.electionid === candidate.electionid)?.title || "Unknown"}
-                        </span>
-                      </div>
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-surface/60 text-4xl text-slate-500">
+                      👤
                     </div>
-                    
-                    {candidate.biography && (
-                      <div className="biography-section">
-                        <h5>Biography</h5>
-                        <p>{candidate.biography}</p>
-                      </div>
-                    )}
-                    
-                    {candidate.manifesto && (
-                      <div className="manifesto-section">
-                        <h5>Manifesto</h5>
-                        <p>{candidate.manifesto}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Statistics Section */}
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-text font-bold text-base">{candidate.name}</h3>
+
+                  <p className="text-[10px] text-text-muted font-semibold tracking-wider uppercase mt-2">
+                    🎯 {candidate.position || "Candidate"}
+                  </p>
+                  <p className="text-[10px] text-indigo-400/80 font-bold uppercase truncate mt-0.5">
+                    📁 {elections.find(e => e.electionid === candidate.electionid)?.title || "Target Ballot"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Accordion details */}
+              {viewCandidateId === candidate.candidateid && (
+                <div className="border-t border-border/50 pt-3 space-y-3 animate-slide-in text-xs">
+                  {candidate.biography && (
+                    <div>
+                      <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wider mb-1">Biography</p>
+                      <p className="text-text-muted leading-relaxed bg-surface/30 p-2.5 rounded-lg border border-border/50">{candidate.biography}</p>
+                    </div>
+                  )}
+
+                  {candidate.manifesto && (
+                    <div>
+                      <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wider mb-1">Manifesto Proposals</p>
+                      <p className="text-text-muted leading-relaxed bg-surface/30 p-2.5 rounded-lg border border-border/50">{candidate.manifesto}</p>
+                    </div>
+                  )}
+
                   {candidateStats[candidate.candidateid] && (
-                    <div className="stats-section">
-                      <h4>Candidate Statistics</h4>
-                      
-                      <div className="stats-grid">
-                        <div className="stat-item">
-                          <span className="stat-label">Total Votes:</span>
-                          <span className="stat-value">{candidateStats[candidate.candidateid].voteCount || 0}</span>
+                    <div className="bg-indigo-600/10 border border-indigo-500/25 p-3 rounded-xl">
+                      <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-2">Real-time Standing</p>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-text-muted text-[9px] uppercase font-semibold">Total Votes</p>
+                          <p className="text-sm font-bold text-text">{candidateStats[candidate.candidateid].voteCount || 0}</p>
                         </div>
-                        
-                        <div className="stat-item">
-                          <span className="stat-label">Vote Percentage:</span>
-                          <span className="stat-value">
-                            {candidateStats[candidate.candidateid].votePercentage || 0}%
-                          </span>
+                        <div>
+                          <p className="text-text-muted text-[9px] uppercase font-semibold">Percentage</p>
+                          <p className="text-sm font-bold text-emerald-400">{candidateStats[candidate.candidateid].votePercentage || 0}%</p>
                         </div>
-                        
-                        <div className="stat-item">
-                          <span className="stat-label">Ranking:</span>
-                          <span className="stat-value">
-                            {candidateStats[candidate.candidateid].ranking || "N/A"}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {/* Vote Trend Graph would go here */}
-                      <div className="vote-trend">
-                        <h5>Vote Trend</h5>
-                        <div className="trend-placeholder">
-                          <p>Vote trend visualization coming soon</p>
+                        <div>
+                          <p className="text-text-muted text-[9px] uppercase font-semibold">Ranking</p>
+                          <p className="text-sm font-bold text-indigo-300">#{candidateStats[candidate.candidateid].ranking || "N/A"}</p>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
               )}
+
+              {/* Action buttons */}
+              <div className="border-t border-border/50 pt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex gap-1.5">
+                  <button 
+                    onClick={() => {
+                      if (viewCandidateId === candidate.candidateid) {
+                        setViewCandidateId(null);
+                      } else {
+                        setViewCandidateId(candidate.candidateid);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-surface/20 border border-border text-text text-[10px] font-semibold hover:bg-surface/40 transition-all flex items-center gap-1"
+                  >
+                    <FaEye /> View Profile
+                  </button>
+
+                  <button 
+                    onClick={() => fetchCandidateStats(candidate.candidateid)}
+                    className="px-2.5 py-1.5 rounded-lg bg-surface/20 border border-border text-text text-[10px] font-semibold hover:bg-surface/40 transition-all flex items-center gap-1"
+                  >
+                    <FaChartBar /> Live Standing
+                  </button>
+
+                  <button 
+                    onClick={() => exportCandidateProfile(candidate)}
+                    className="px-2.5 py-1.5 rounded-lg bg-surface/20 border border-border text-text-muted hover:text-text transition-all text-xs"
+                    title="Export Profile Details"
+                  >
+                    <FaDownload />
+                  </button>
+                </div>
+
+                <div className="flex gap-1.5">
+                  <button 
+                    onClick={() => handleEdit(candidate)}
+                    className="p-1.5 rounded-lg bg-surface/20 border border-border hover:bg-surface/40 text-text-muted text-xs transition-all"
+                    title="Edit profile"
+                  >
+                    <FaEdit />
+                  </button>
+
+                  <button 
+                    onClick={() => handleDisqualify(candidate.candidateid)}
+                    disabled={deleteLoading === candidate.candidateid}
+                    className={`px-2 py-1.5 rounded-lg border text-[10px] font-bold transition-all flex items-center gap-1 ${
+                      confirmDelete === candidate.candidateid
+                        ? "bg-rose-600 border-rose-500 text-white"
+                        : "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white"
+                    }`}
+                  >
+                    {confirmDelete === candidate.candidateid ? "Confirm Disqualification" : <FaTrash />}
+                  </button>
+                </div>
+              </div>
             </div>
           ))}
         </div>

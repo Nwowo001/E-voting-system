@@ -1,886 +1,385 @@
-import React, { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import ButtonComponent from "../Components/Button/buttonComponent";
 import axios from "axios";
-import logo from "../../assets/Images/vote-pakistan_1142-4388.jpg";
-import "./UserDashboard.css";
 import { io } from "socket.io-client";
-import { Link } from "react-router-dom";
 import { useUserContext } from "../../Context/UserContext";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-// Import React Icons
-import {
-  FaHome,
-  FaUsers,
-  FaHistory,
-  FaUser,
-  FaSignOutAlt,
-  FaChartBar,
-  FaVoteYea,
-  FaCalendarAlt,
-  FaUserCheck,
-  FaChartPie,
-  FaChartLine,
-  FaBars,
-  FaTimes,
-  FaCircle
+  FaHome, FaHistory, FaUser, FaSignOutAlt,
+  FaVoteYea, FaCalendarAlt, FaUserCheck, FaBars, FaTimes, FaSun, FaMoon,
 } from "react-icons/fa";
 
-const API_URL = "http://localhost:5000/api";
-const socket = io("http://localhost:5000");
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000", { transports: ["websocket", "polling"] });
 
 const LiveBadge = () => (
-  <span className="live-badge">
-    <FaCircle className="live-dot" />
+  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30">
+    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
     LIVE
   </span>
 );
 
-const EndedBadge = () => (
-  <span className="ended-badge">
-    ENDED
-  </span>
+const StatusBadge = ({ type }) => {
+  const styles = {
+    live: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    ended: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+    upcoming: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    voted: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
+  };
+  const labels = { live: "Active", ended: "Ended", upcoming: "Upcoming", voted: "Voted ✓" };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${styles[type]}`}>
+      {labels[type]}
+    </span>
+  );
+};
+
+const StatCard = ({ icon, label, value, sub }) => (
+  <div className="bg-surface/20 border border-border rounded-2xl p-5 hover:bg-surface/40 transition-all duration-200">
+    <div className="flex items-start justify-between mb-3">
+      <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 text-xl">{icon}</div>
+    </div>
+    <div className="text-2xl font-bold text-text mb-0.5">{value}</div>
+    <div className="text-xs font-semibold text-text-muted">{label}</div>
+    {sub && <div className="text-xs text-text-muted/65 mt-0.5">{sub}</div>}
+  </div>
 );
 
 const UserDashboard = () => {
-  const [selectedElectionId, setSelectedElectionId] = useState(null);
-  const [availableElections, setAvailableElections] = useState([]);
   const [elections, setElections] = useState({ active: [], upcoming: [], ended: [] });
   const [userVotes, setUserVotes] = useState([]);
-  const [stats, setStats] = useState({
-    totalVotes: 0,
-    totalVoterTurnout: 0,
-    totalCandidates: 0,
-    activeVoters: 0,
-  });
-  const [activeSection, setActiveSection] = useState("election");
+  const [activeSection, setActiveSection] = useState("elections");
   const [welcomeVisible, setWelcomeVisible] = useState(false);
-  const [activeElectionStats, setActiveElectionStats] = useState({
-    candidates: [],
-    totalVotes: 0,
-    electionId: null,
-    electionTitle: "",
-    voterTurnout: 0,
-    totalCandidates: 0,
-    activeVoters: 0,
-  });
   const [loading, setLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
-  const [isStatsLoading, setIsStatsLoading] = useState(false);
-  
-  // Use the UserContext properly
-  const { user } = useUserContext();
-  
-  // Updated navigation with React Icons
+  const { user, theme, toggleTheme } = useUserContext();
+
   const navigation = [
-    { name: "election", path: "/dashboard", icon: <FaHome /> },
-    { name: "candidates", path: "/candidates", icon: <FaUsers /> },
-    { name: "voting history", path: "/voting-history", icon: <FaHistory /> },
-    { name: "profile", path: "/profile", icon: <FaUser /> },
+    { name: "elections", label: "Elections", icon: <FaVoteYea /> },
+    { name: "history", label: "Participation", icon: <FaHistory /> },
+    { name: "profile", label: "Profile", icon: <FaUser />, path: "/profile" },
   ];
 
-  // Function to check if an election has ended
-  const hasElectionEnded = (election) => {
-    if (!election) return false;
-    const now = new Date();
-    const endDate = new Date(election.end_date);
-    return now > endDate;
-  };
-
-  // Function to check if an election is active but not ended
-  const isElectionLive = (election) => {
-    if (!election) return false;
-    return election.isactive && !hasElectionEnded(election);
-  };
-
-  // Fix the welcome message effect - make it non-blocking
-// Update the welcome message useEffect to make it non-blocking
-useEffect(() => {
-  // Check if this is the first visit after login
-  const hasShownWelcome = sessionStorage.getItem('welcomeShown');
-  
-  if (user && !hasShownWelcome) {
-    setWelcomeVisible(true);
-    // Set flag in sessionStorage to prevent showing welcome again on refresh
-    sessionStorage.setItem('welcomeShown', 'true');
-    
-    const timer = setTimeout(() => {
-      setWelcomeVisible(false);
-    }, 3000);
-    
-    return () => clearTimeout(timer);
-  }
-}, [user]);
-
-
-  // Add this useEffect to check for elections that have ended
   useEffect(() => {
-    const checkForEndedElections = () => {
-      const now = new Date();
-      
-      // Check if any active elections have ended
-      elections.active.forEach(election => {
-        const endDate = new Date(election.end_date);
-        if (now > endDate) {
-          handleElectionEnd(election.electionid);
-        }
-      });
-    };
-    
-    // Run the check immediately
-    checkForEndedElections();
-    
-    // Set up an interval to check every minute
-    const interval = setInterval(checkForEndedElections, 60000);
-    
-    return () => clearInterval(interval);
-  }, [elections.active]);
-
-  useEffect(() => {
-    fetchAvailableElections();
-  }, []);
-
-  useEffect(() => {
-    if (socket) {
-      socket.on("stats_update", (newStats) => {
-        setStats((prev) => ({
-          ...prev,
-          ...newStats,
-        }));
-      });
-
-      socket.on("active_voters_update", (count) => {
-        setStats((prev) => ({
-          ...prev,
-          activeVoters: count,
-        }));
-      });
-
-      return () => {
-        socket.off("stats_update");
-        socket.off("active_voters_update");
-      };
-    }
-  }, []);
-
-  // Fix the data fetching useEffect
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        await Promise.all([
-          fetchElections(),
-          fetchUserVotes(),
-          fetchStats(),
-          fetchActiveElectionStats(),
-        ]);
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoading(false);
+    if (user) {
+      const shown = sessionStorage.getItem("welcomeShown");
+      if (!shown) {
+        setWelcomeVisible(true);
+        sessionStorage.setItem("welcomeShown", "true");
+        setTimeout(() => setWelcomeVisible(false), 4000);
       }
-    };
+    }
+  }, [user]);
 
-    fetchData();
-    
-    // Add proper socket event listeners
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
+  useEffect(() => {
+    const init = async () => {
+      await Promise.all([fetchElections(), fetchUserVotes()]);
+      setLoading(false);
+    };
+    init();
+
+    socket.on("election_updated", () => {
+      fetchElections();
     });
-    socket.on("election_updated", handleElectionUpdate);
-    socket.on("vote_cast", handleVoteUpdate);
-    socket.on("election_started", handleElectionStart);
-    socket.on("election_ended", handleElectionEnd);
 
     return () => {
-      socket.off("connect_error");
       socket.off("election_updated");
-      socket.off("vote_cast");
-      socket.off("election_started");
-      socket.off("election_ended");
     };
   }, []);
 
-  const handleElectionChange = (event) => {
-    const electionId = event.target.value;
-    setSelectedElectionId(electionId);
-    fetchElectionStats(electionId);
-  };
+  const token = () => localStorage.getItem("token");
+  const headers = () => ({ Authorization: `Bearer ${token()}` });
 
   const fetchElections = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/elections`, {
-        withCredentials: true,
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const allElections = response.data;
+      const res = await axios.get(`${API_URL}/elections`, { withCredentials: true, headers: headers() });
+      const all = res.data;
       const now = new Date();
+      // Combine 'YYYY-MM-DD' date + 'HH:MM:SS' time into a local Date (no Z = local time).
+      const toLocal = (date, time) => new Date(`${date}T${time || "23:59:59"}`);
 
       setElections({
-        active: allElections.filter(
-          (election) => election.isactive && new Date(election.end_date) > now
+        // Active = time window is currently open (purely time-based, not DB flag)
+        active: all.filter(e =>
+          toLocal(e.start_date, e.start_time) <= now &&
+          toLocal(e.end_date, e.end_time) > now
         ),
-        upcoming: allElections.filter(
-          (election) =>
-            !election.isactive && new Date(election.start_date) > now
-        ),
-        ended: allElections.filter(
-          (election) => new Date(election.end_date) <= now
-        ),
+        // Upcoming = hasn't started yet
+        upcoming: all.filter(e => toLocal(e.start_date, e.start_time) > now),
+        // Ended = end time has passed
+        ended: all.filter(e => toLocal(e.end_date, e.end_time) <= now),
       });
-    } catch (error) {
-      console.error("Error fetching elections:", error.message);
-    }
-  };
-
-  const fetchElectionStats = async (electionId) => {
-    setIsStatsLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        `${API_URL}/stats/elections/${electionId}/stats`,
-        {
-          withCredentials: true,
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-
-      const { candidates, totalVotes, title, voterTurnout } = response.data;
-      setActiveElectionStats({
-        candidates: candidates.map((c) => ({
-          name: c.name,
-          votes: c.voteCount || 0,
-          party: c.party,
-        })),
-        totalVotes,
-        electionId: electionId,
-        electionTitle: title,
-        voterTurnout: voterTurnout || 0,
-        totalCandidates: candidates.length,
-      });
-    } catch (error) {
-      console.error("Error fetching election stats:", error);
-      setActiveElectionStats({
-        candidates: [],
-        totalVotes: 0,
-        electionId: null,
-        electionTitle: "",
-        voterTurnout: 0,
-        totalCandidates: 0,
-      });
-    } finally {
-      setIsStatsLoading(false);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const fetchUserVotes = async () => {
     try {
-      // Add token to the request header
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/votes/user`, {
-        withCredentials: true,
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUserVotes(response.data);
-    } catch (error) {
-      console.error("Error fetching user votes:", error.message);
-    }
+      const res = await axios.get(`${API_URL}/voters/participation`, { withCredentials: true, headers: headers() });
+      setUserVotes(res.data);
+    } catch (err) { console.error(err); }
   };
 
-  const fetchStats = async () => {
-    try {
-      // Add token to the request header
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/stats`, {
-        withCredentials: true,
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setStats({
-        ...response.data,
-        activeVoters: response.data.activeVoters || 0,
-        registeredParty: response.data.registeredParty || "Not Registered",
-        totalVotes: response.data.totalVotes || 0,
-        participatedElections: response.data.participatedElections || 0,
-        lastVoteDate: response.data.lastVoteDate
-          ? new Date(response.data.lastVoteDate).toLocaleDateString()
-          : "No votes yet",
-      });
-    } catch (error) {
-      console.error("Error fetching stats:", error.message);
-    }
+  const hasVoted = (electionId) => userVotes.some(v => v.electionid === electionId && v.has_voted);
+
+  const calcTimeRemaining = (endDateStr, endTimeStr) => {
+    const diff = new Date(`${endDateStr}T${endTimeStr || "23:59:59"}`) - new Date();
+    if (diff <= 0) return "Ended";
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    return d > 0 ? `${d}d ${h}h left` : `${h}h ${m}m left`;
   };
 
-  const handleElectionUpdate = (updatedElection) => {
-    setElections((prev) => {
-      const newState = { ...prev };
-      if (updatedElection.isactive) {
-        newState.active = [updatedElection];
-        newState.upcoming = prev.upcoming.filter(
-          (e) => e.electionid !== updatedElection.electionid
-        );
-      } else {
-        newState.upcoming = prev.upcoming.map((election) =>
-          election.electionid === updatedElection.electionid
-            ? updatedElection
-            : election
-        );
-      }
-      return newState;
-    });
-  };
-  
-  const fetchActiveElectionStats = async () => {
-    try {
-      // Add token to the request header
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        `${API_URL}/stats/elections/active/stats`,
-        {
-          withCredentials: true,
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-
-      const activeStats = response.data[0] || {};
-      setActiveElectionStats({
-        candidates: activeStats.candidates || [],
-        totalVotes: activeStats.total_votes || 0,
-        electionId: activeStats.electionid,
-        electionTitle: activeStats.title || "",
-        voterTurnout: activeStats.voter_turnout || 0,
-        totalCandidates: activeStats.candidate_count || 0,
-        activeVoters: activeStats.voter_count || 0,
-      });
-    } catch (error) {
-      console.error("Error fetching active election stats:", error);
-      setActiveElectionStats({
-        candidates: [],
-        totalVotes: 0,
-        electionId: null,
-        electionTitle: "",
-        voterTurnout: 0,
-        totalCandidates: 0,
-        activeVoters: 0,
-      });
-    }
+  const handleLogout = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = "/login";
   };
 
-  const handleVoteUpdate = async (voteData) => {
-    if (voteData.electionId === activeElectionStats.electionId) {
-      await fetchActiveElectionStats();
-    }
-  };
-
-  const handleElectionStart = async (election) => {
-    setElections((prev) => ({
-      active: [election],
-      upcoming: prev.upcoming.filter(
-        (e) => e.electionid !== election.electionid
-      ),
-      ended: prev.ended
-    }));
-    await fetchActiveElectionStats();
-  };
-
-  const handleElectionEnd = async (electionId) => {
-    setElections((prev) => {
-      const endedElection = prev.active.find(e => e.electionid === electionId);
-      return {
-        active: prev.active.filter((e) => e.electionid !== electionId),
-        upcoming: prev.upcoming.filter((e) => e.electionid !== electionId),
-        ended: endedElection ? [...prev.ended, endedElection] : prev.ended
-      };
-    });
-    
-    // If the currently selected election has ended, update the stats
-    if (selectedElectionId === electionId) {
-      setActiveElectionStats({
-        ...activeElectionStats,
-        electionEnded: true
-      });
-    }
-  };
-
-  const fetchAvailableElections = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${API_URL}/elections/all`, {
-        withCredentials: true,
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAvailableElections(response.data);
-      if (!selectedElectionId && response.data.length > 0) {
-        setSelectedElectionId(response.data[0].electionid);
-        fetchElectionStats(response.data[0].electionid);
-      }
-    } catch (error) {
-      console.error("Error fetching available elections:", error);
-    }
-  };
-
-  const handleLogout = async () => {
-    console.log("Starting logout process...");
-    try {
-      setLoading(true);
-      console.log("Making logout API call...");
-
-      // First clear all states and storage
-      setElections({ active: [], upcoming: [], ended: [] });
-      setUserVotes([]);
-      setStats({
-        totalVotes: 0,
-        totalVoterTurnout: 0,
-        totalCandidates: 0,
-        activeVoters: 0,
-      });
-
-      // Disconnect socket
-      if (socket) {
-        socket.disconnect();
-        console.log("Socket disconnected");
-      }
-
-      // Clear local storage and session storage
-      localStorage.clear();
-      sessionStorage.clear();
-      console.log("Local storage cleared");
-
-      // Make the API call
-      const token = localStorage.getItem("token");
-      const response = await axios.post(
-        `${API_URL}/auth/logout`,
-        {},
-        {
-          withCredentials: true,
-          headers: { Authorization: `Bearer ${token}` },
-          // Add timeout to prevent hanging
-          timeout: 5000,
-        }
-      );
-      console.log("Logout API response:", response);
-
-      // Small delay to ensure state updates are processed
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Use window.location for a full page refresh and redirect
-      window.location.href = "/";
-    } catch (error) {
-      console.error("Logout error details:", error);
-
-      // Clear everything even if API call fails
-      localStorage.clear();
-      sessionStorage.clear();
-
-      // Force a page refresh and redirect
-      window.location.href = "/";
-    }
-  };
-
-  const hasVoted = (electionId) =>
-    userVotes.some((vote) => vote.electionid === electionId);
-
-  const calculateTimeRemaining = (endDate) => {
-    const diff = new Date(endDate) - new Date();
-    if (diff <= 0) return "Election Ended";
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    return `${days}d ${hours}h ${minutes}m remaining`;
-  };
-
-  const handleVoteClick = (electionId) => {
-    if (!hasVoted(electionId)) {
-      navigate(`/vote/${electionId}`);
-    }
-  };
-
-  const renderElectionSection = (elections, title, isUpcoming = false, isEnded = false) => (
-    <section className="election-section">
-      <div className="section-header">
-        <h2>
-          {isUpcoming ? <FaCalendarAlt className="section-icon" /> : 
-           isEnded ? <FaHistory className="section-icon" /> : 
-           <FaVoteYea className="section-icon" />}
-          {title}
-          {!isUpcoming && !isEnded && elections.length > 0 && <LiveBadge />}
-        </h2>
+  const ElectionCard = ({ election, type }) => (
+    <div className="bg-surface/20 border border-border rounded-2xl p-5 hover:bg-surface/40 hover:border-border/60 transition-all duration-200 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-semibold text-text text-sm leading-snug flex-1">{election.title}</h3>
+        <StatusBadge type={hasVoted(election.electionid) ? "voted" : type} />
       </div>
-      
-      {elections.length > 0 ? (
-        <div className="election-grid">
-          {elections.map((election) => (
-            <div key={election.electionid} className="election-card">
-              <div className="election-status">
-                {hasVoted(election.electionid) ? (
-                  <span className="voted-badge">Voted</span>
-                ) : isEnded ? (
-                  <EndedBadge />
-                ) : election.isactive && !hasElectionEnded(election) ? (
-                  <LiveBadge />
-                ) : (
-                  <span className="pending-badge">Pending</span>
-                )}
-              </div>
-              <p className="time-remaining">
-                {isEnded ? 
-                  `Ended: ${new Date(election.end_date).toLocaleDateString()}` :
-                  election.isactive && !hasElectionEnded(election) ?
-                    calculateTimeRemaining(election.end_date) :
-                    `Starts: ${new Date(election.start_date).toLocaleDateString()}`
-                }
-              </p>
-              <h3 className="election-card-title">{election.title}</h3>
-              {/* Only render clickable button for active elections that haven't ended */}
-              {!isUpcoming && !isEnded ? (
-                <ButtonComponent
-                  onClick={() => handleVoteClick(election.electionid)}
-                  disabled={!election.isactive || hasVoted(election.electionid) || hasElectionEnded(election)}
-                  className={`vote-btn ${
-                    hasVoted(election.electionid) || hasElectionEnded(election) ? "voted disabled" : ""
-                  }`}
-                >
-                  {hasVoted(election.electionid) ? (
-                    <>
-                      <span style={{ marginRight: "5px" }}>⛔</span>
-                      Already Voted
-                    </>
-                  ) : hasElectionEnded(election) ? (
-                    "Election Ended"
-                  ) : election.isactive ? (
-                    "Vote Now"
-                  ) : (
-                    "Upcoming"
-                  )}
-                </ButtonComponent>
-              ) : (
-                /* For upcoming and ended elections, render a non-clickable div that looks like a button */
-                <div className="vote-btn disabled non-interactive">
-                  {isEnded ? "Election Ended" : "Upcoming Election"}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="no-elections-message">
-          <p>No {isEnded ? "completed" : isUpcoming ? "upcoming" : "active"} elections at this time.</p>
-        </div>
+      {election.description && (
+        <p className="text-text-muted text-xs line-clamp-2">{election.description}</p>
       )}
-    </section>
-  );
-  
-
-  const renderLiveResultsSection = () => (
-    <div className="live-results-section">
-      <div className="section-header">
-        <h2>
-          <FaChartBar className="section-icon" />
-          Election Results
-        </h2>
+      <div className="flex items-center gap-1.5 text-xs text-text-muted">
+        <FaCalendarAlt className="text-indigo-400" />
+        {type === "ended"
+          ? `Ended ${new Date(`${election.end_date}T${election.end_time || "23:59:59"}`).toLocaleString()}`
+          : type === "live"
+          ? calcTimeRemaining(election.end_date, election.end_time)
+          : `Starts ${new Date(`${election.start_date}T${election.start_time || "00:00:00"}`).toLocaleString()}`}
       </div>
-      <div className="election-dropdown">
-        <select
-          value={selectedElectionId || ""}
-          onChange={handleElectionChange}
-          className="election-select"
+      {type === "live" && (
+        <button
+          onClick={() => user?.role !== "candidate" && !hasVoted(election.electionid) && navigate(`/vote/${election.electionid}`)}
+          disabled={hasVoted(election.electionid) || user?.role === "candidate"}
+          className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
+            hasVoted(election.electionid) || user?.role === "candidate"
+              ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 cursor-not-allowed"
+              : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-indigo-500/20"
+          }`}
         >
-          <option value="">Select an election</option>
-          {availableElections.map((election) => (
-            <option key={election.electionid} value={election.electionid}>
-              {election.title}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {isStatsLoading ? (
-        <div className="loading-container">
-          <div className="loader"></div>
-          <p>Loading election stats...</p>
-        </div>
-      ) : selectedElectionId ? (
-        <>
-          <h3 className="election-title">
-            {activeElectionStats.electionTitle}
-            {elections.active.some(e => e.electionid === selectedElectionId) ? (
-              <LiveBadge />
-            ) : elections.ended.some(e => e.electionid === selectedElectionId) ? (
-              <EndedBadge />
-            ) : null}
-          </h3>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon">
-                <FaVoteYea />
-              </div>
-              <div className="stat-content">
-                <h3>Total Votes</h3>
-                <p>{activeElectionStats.totalVotes}</p>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <FaUserCheck />
-              </div>
-              <div className="stat-content">
-                <h3>Voter Turnout</h3>
-                <p>{activeElectionStats.voterTurnout}%</p>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <FaUsers />
-              </div>
-              <div className="stat-content">
-                <h3>Total Candidates</h3>
-                <p>{activeElectionStats.totalCandidates}</p>
-              </div>
-            </div>
-          </div>
-          <div className="chart-container">
-            {activeElectionStats.candidates.length > 0 ? (
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={activeElectionStats.candidates}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="name"
-                    angle={-45}
-                    textAnchor="end"
-                    height={70}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis />
-                  <Tooltip
-                    content={({ payload, label }) => {
-                      if (payload && payload.length) {
-                        return (
-                          <div className="custom-tooltip">
-                            <p>{`${label} (${payload[0]?.payload.party})`}</p>
-                            <p>{`Votes: ${payload[0]?.value}`}</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar dataKey="votes" fill="#3498db" animationDuration={300} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="no-data-message">No candidate data available for this election</p>
-            )}
-          </div>
-        </>
-      ) : (
-        <p className="select-message">Please select an election to view statistics</p>
+          {user?.role === "candidate" ? "Candidate (Voting Restricted)" : hasVoted(election.electionid) ? "✓ Already Voted" : "Vote Now"}
+        </button>
       )}
     </div>
   );
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="loader"></div>
-        <p>Loading dashboard...</p>
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-muted">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="min-h-screen bg-bg text-text flex transition-colors duration-300">
+      {/* Welcome overlay */}
       {welcomeVisible && (
-        <div className="welcome-overlay">
-          <h1>Welcome, {user?.name}! 👋</h1>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface/20 backdrop-blur-xl border border-border rounded-3xl p-10 text-center shadow-2xl">
+            <div className="text-5xl mb-4">👋</div>
+            <h2 className="text-3xl font-bold text-text mb-2">Welcome back,</h2>
+            <p className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">{user?.name}!</p>
+          </div>
         </div>
       )}
-      
-      {/* Mobile Header - Only visible on small screens */}
-      <div className="mobile-header">
-        <button 
-          className="menu-toggle" 
-          onClick={() => setMobileMenuOpen(true)}
-          aria-label="Open menu"
-        >
-          <FaBars />
-        </button>
-        <h1>E-Voting Dashboard</h1>
-        <button 
-          className="mobile-logout" 
-          onClick={handleLogout}
-          aria-label="Logout"
-        >
-          <FaSignOutAlt />
-        </button>
-      </div>
-      
-      {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)}></div>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
-      
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header">
-          <h2>E-Voting System</h2>
-          <button 
-            className="close-menu" 
-            onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close menu"
-          >
-            <FaTimes />
-          </button>
-        </div>
-        
-        {/* // Find the sidebar-logo section in userDashboard.jsx and replace it with: */}
 
-<div className="sidebar-logo">
-  {user?.profileImage ? (
-    <img 
-      src={user.profileImage} 
-      alt="Profile" 
-      className="user-profile-image" 
-      onError={(e) => {
-        // Fallback to logo if profile image fails to load
-        e.target.src = logo;
-        e.target.onerror = null;
-      }}
-    />
-  ) : (
-    <img src={logo} alt="E-voting System" />
-  )}
-</div>
-
-        
-        <div className="user-info">
-          <h3>{user?.name}</h3>
-          <p>{user?.email}</p>
+      {/* Sidebar */}
+      <aside className={`fixed top-0 left-0 h-full w-64 bg-surface/90 backdrop-blur-xl border-r border-border z-30 flex flex-col transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        {/* Sidebar Header */}
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                <FaVoteYea className="text-white text-sm" />
+              </div>
+              <span className="font-bold text-text text-sm">AcuVote</span>
+            </div>
+            <button onClick={() => setMobileOpen(false)} className="lg:hidden text-text-muted hover:text-text cursor-pointer">
+              <FaTimes />
+            </button>
+          </div>
+          {/* User info */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+              {user?.name?.charAt(0).toUpperCase()}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-text text-sm font-semibold truncate">{user?.name}</p>
+              <p className="text-text-muted text-xs truncate">{user?.matric_number || user?.email || "Voter"}</p>
+            </div>
+          </div>
         </div>
-        
-        <nav className="sidebar-nav">
-          <ul>
-            {navigation.map((item) => (
-              <li key={item.name}>
-                <Link
-                  to={item.path}
-                  className={activeSection === item.name ? "active" : ""}
-                  onClick={() => {
-                    setActiveSection(item.name);
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <span className="nav-icon">{item.icon}</span>
-                  {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
-                </Link>
-              </li>
-            ))}
-          </ul>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-1">
+          {navigation.map(item => (
+            <button
+              key={item.name}
+              onClick={() => {
+                if (item.path) navigate(item.path);
+                else setActiveSection(item.name);
+                setMobileOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                activeSection === item.name
+                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/25"
+                  : "text-text-muted hover:text-text hover:bg-surface-2/30"
+              }`}
+            >
+              <span className="text-base">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
         </nav>
-        
-        <div className="sidebar-footer">
-          <button className="logout-button" onClick={handleLogout}>
-            <FaSignOutAlt className="logout-icon" />
-            <span>Logout</span>
+
+        {/* Theme toggler & Logout */}
+        <div className="p-4 border-t border-border space-y-2">
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-text-muted hover:text-text hover:bg-surface-2/30 transition-all duration-200 cursor-pointer"
+          >
+            {theme === "light" ? <FaMoon className="text-base text-indigo-400" /> : <FaSun className="text-base text-amber-400" />}
+            Theme Mode
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 cursor-pointer"
+          >
+            <FaSignOutAlt />
+            Logout
           </button>
         </div>
       </aside>
 
-      <main className="main-content">
-        <header className="dashboard-header">
-          <div className="header-title">
-            <h1>Dashboard</h1>
-            <p>{new Date().toLocaleDateString()}</p>
-          </div>
-          <button className="logout-button desktop-only" onClick={handleLogout}>
-            <FaSignOutAlt className="logout-icon" />
-            <span>Logout</span>
+      {/* Main content */}
+      <main className="flex-1 lg:ml-64">
+        {/* Mobile Header */}
+        <header className="sticky top-0 z-10 bg-bg/85 backdrop-blur border-b border-border px-4 py-3 flex items-center justify-between lg:hidden transition-colors duration-300">
+          <button onClick={() => setMobileOpen(true)} className="text-text-muted hover:text-text cursor-pointer">
+            <FaBars className="text-xl" />
+          </button>
+          <h1 className="text-text font-bold text-sm">AcuVote Dashboard</h1>
+          {/* Theme toggler in Mobile Header */}
+          <button onClick={toggleTheme} className="text-text-muted hover:text-text cursor-pointer">
+            {theme === "light" ? <FaMoon /> : <FaSun />}
           </button>
         </header>
 
-        <div className="dashboard-content">
-          {renderElectionSection(elections.active, "Active Election")}
-          {renderElectionSection(elections.upcoming, "Upcoming Elections", true)}
-          {renderElectionSection(elections.ended, "Completed Elections", false, true)}
-          
-          <section className="stats-section">
-            <div className="section-header">
-              <h2>
-                <FaChartPie className="section-icon" />
-                Live Election Statistics
-              </h2>
+        <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+          {/* Page header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-text mb-1">
+              {activeSection === "elections" && "Elections Portal"}
+              {activeSection === "history" && "Participation History"}
+            </h1>
+            <p className="text-text-muted text-sm font-medium">{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+          </div>
+
+          {/* Elections Section */}
+          {activeSection === "elections" && (
+            <div className="space-y-8">
+              {/* Quick stats */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard icon={<FaVoteYea />} label="Active Elections" value={elections.active.length} />
+                <StatCard icon={<FaCalendarAlt />} label="Upcoming" value={elections.upcoming.length} />
+                <StatCard icon={<FaHistory />} label="Completed" value={elections.ended.length} />
+                <StatCard icon={<FaUserCheck />} label="Participated" value={userVotes.filter(v => v.has_voted).length} />
+              </div>
+
+              {/* Active Elections */}
+              {elections.active.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <h2 className="text-lg font-bold text-text">Active Elections</h2>
+                    <LiveBadge />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {elections.active.map(e => <ElectionCard key={e.electionid} election={e} type="live" />)}
+                  </div>
+                </div>
+              )}
+
+              {/* Upcoming */}
+              {elections.upcoming.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-bold text-text mb-4">Upcoming Elections</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {elections.upcoming.map(e => <ElectionCard key={e.electionid} election={e} type="upcoming" />)}
+                  </div>
+                </div>
+              )}
+
+              {/* Ended */}
+              {elections.ended.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-bold text-text mb-4">Completed Elections</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {elections.ended.map(e => <ElectionCard key={e.electionid} election={e} type="ended" />)}
+                  </div>
+                </div>
+              )}
+
+              {elections.active.length === 0 && elections.upcoming.length === 0 && elections.ended.length === 0 && (
+                <div className="text-center py-20 bg-surface/10 border border-border rounded-2xl">
+                  <div className="text-5xl mb-4">🗳️</div>
+                  <h3 className="text-text font-bold text-lg mb-2">No elections yet</h3>
+                  <p className="text-text-muted text-sm">Elections will appear here once the administrator creates them.</p>
+                </div>
+              )}
             </div>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <FaVoteYea />
+          )}
+
+          {/* Participation History */}
+          {activeSection === "history" && (
+            <div className="space-y-4">
+              {userVotes.length > 0 ? (
+                userVotes.map((vote, i) => (
+                  <div key={i} className="bg-surface/20 border border-border rounded-2xl p-5 flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-text font-bold text-sm mb-1">{vote.title}</h3>
+                      <p className="text-text-muted text-xs font-medium">
+                        Timeline: {new Date(vote.start_date + "T00:00:00").toLocaleDateString()} – {new Date(vote.end_date + "T00:00:00").toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {vote.has_voted ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-bold border border-emerald-500/25">
+                          ✓ Participated
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-surface-2/40 text-text-muted text-xs font-bold border border-border">
+                          Missed / Not voted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-20 bg-surface/10 border border-border rounded-2xl">
+                  <FaHistory className="text-4xl text-text-muted mx-auto mb-3" />
+                  <h3 className="text-text font-bold mb-2">No participation history</h3>
+                  <p className="text-text-muted text-sm">Your voting participation records will appear here.</p>
                 </div>
-                <div className="stat-content">
-                  <h3>Election Name</h3>
-                  <p>
-                    {activeElectionStats.electionTitle || "No Active Election"}
-                  </p>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <FaChartBar />
-                </div>
-                <div className="stat-content">
-                  <h3>Total Votes Cast</h3>
-                  <p>{stats.totalVotes}</p>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <FaUserCheck />
-                </div>
-                <div className="stat-content">
-                  <h3>Voter Turnout</h3>
-                  <p>{stats.totalVoterTurnout}%</p>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <FaUsers />
-                </div>
-                <div className="stat-content">
-                  <h3>Total Candidates</h3>
-                  <p>{stats.totalCandidates}</p>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <FaChartLine />
-                </div>
-                <div className="stat-content">
-                  <h3>Active Voters</h3>
-                  <p>
-                    {stats.activeVoters} <LiveBadge />
-                  </p>
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <FaVoteYea />
-                </div>
-                <div className="stat-content">
-                  <h3>Active Election</h3>
-                  <p>{activeElectionStats.electionTitle || "None"}</p>
-                </div>
-              </div>
+              )}
             </div>
-          </section>
+          )}
         </div>
-        {renderLiveResultsSection()}
       </main>
     </div>
   );
