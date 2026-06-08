@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { FaArrowLeft, FaHistory, FaCheckCircle, FaTimesCircle, FaPoll, FaSpinner } from "react-icons/fa";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL } from "../../config";
 
 const VotingHistory = () => {
   const navigate = useNavigate();

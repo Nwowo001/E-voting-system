@@ -32,7 +32,9 @@ const createTransporter = () => {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
-    console.warn("⚠️  RESEND_API_KEY not set in .env. Email will run in Mock Mode (OTPs print to console).");
+    console.warn(
+      "⚠️  RESEND_API_KEY not set in .env. Email will run in Mock Mode (OTPs print to console).",
+    );
     return null;
   }
 
@@ -57,24 +59,32 @@ export const sendOTPEmail = async (email, otpCode, type) => {
   // --- Rate limit check ---
   const limit = checkOTPRateLimit(email);
   if (!limit.allowed) {
-    console.warn(`🚫 OTP rate limit hit for ${email}. Try again in ${limit.waitSecs}s.`);
-    throw new Error(`Too many verification codes requested. Please wait ${limit.waitSecs} seconds before trying again.`);
+    console.warn(
+      `🚫 OTP rate limit hit for ${email}. Try again in ${limit.waitSecs}s.`,
+    );
+    throw new Error(
+      `Too many verification codes requested. Please wait ${limit.waitSecs} seconds before trying again.`,
+    );
   }
 
-  const from = process.env.RESEND_FROM_EMAIL || `"AcuVote System" <no-reply@acuvote.com>`;
-  
+  const from =
+    process.env.RESEND_FROM_EMAIL || `"AcuVote System" <no-reply@acuvote.com>`;
+
   let subject = "AcuVote Verification Code";
   let bodyTitle = "Verify Your Account";
-  let bodyText = "Please use the verification code below to complete your registration on AcuVote.";
+  let bodyText =
+    "Please use the verification code below to complete your registration on AcuVote.";
 
   if (type === "vote") {
     subject = "AcuVote Security Code for Voting";
     bodyTitle = "Confirm Your Ballot Choice";
-    bodyText = "You requested a verification code to cast your vote. Enter this code to submit your choice.";
+    bodyText =
+      "You requested a verification code to cast your vote. Enter this code to submit your choice.";
   } else if (type === "password_reset") {
     subject = "AcuVote Password Reset Request";
     bodyTitle = "Reset Your Password";
-    bodyText = "We received a request to reset your password. Use the code below to complete the reset process.";
+    bodyText =
+      "We received a request to reset your password. Use the code below to complete the reset process.";
   }
 
   const htmlContent = `
@@ -102,7 +112,9 @@ export const sendOTPEmail = async (email, otpCode, type) => {
   console.log(`🔑 Generated OTP for ${email} [${type}]: ${otpCode}`);
 
   if (!transporter) {
-    console.log(`\n======================================================\n[MOCK EMAIL] OTP Sent to ${email}\nType: ${type}\nSubject: ${subject}\nCode: ${otpCode}\n======================================================\n`);
+    console.log(
+      `\n======================================================\n[MOCK EMAIL] OTP Sent to ${email}\nType: ${type}\nSubject: ${subject}\nCode: ${otpCode}\n======================================================\n`,
+    );
     return { success: true, mock: true };
   }
 
@@ -115,7 +127,9 @@ export const sendOTPEmail = async (email, otpCode, type) => {
         subject,
         html: htmlContent,
       });
-      console.log(`📧 OTP Email successfully sent to ${email} for type: ${type}`);
+      console.log(
+        `📧 OTP Email successfully sent to ${email} for type: ${type}`,
+      );
     } catch (error) {
       console.error(`❌ Failed to send OTP email to ${email}:`, error.message);
       console.log(`🔑 [CONSOLE FALLBACK] OTP Code for ${email}: ${otpCode}`);

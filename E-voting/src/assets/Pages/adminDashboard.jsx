@@ -30,7 +30,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL as API_BASE_URL } from "../../config";
 
 const LiveBadge = () => (
   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/25">

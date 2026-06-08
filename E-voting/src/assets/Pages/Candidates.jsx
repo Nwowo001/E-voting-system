@@ -5,8 +5,9 @@ import { io } from "socket.io-client";
 import { FaArrowLeft, FaSearch, FaFilter, FaUserTie, FaVoteYea } from "react-icons/fa";
 import { useUserContext } from "../../Context/UserContext";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000", { withCredentials: true });
+import { API_URL, SOCKET_URL, BACKEND_URL } from "../../config";
+
+const socket = io(SOCKET_URL, { withCredentials: true });
 
 const Candidates = () => {
   const navigate = useNavigate();
@@ -151,7 +152,7 @@ const Candidates = () => {
                       {candidate.image_url ? (
                         <>
                           <img 
-                            src={candidate.image_url.startsWith('http') ? candidate.image_url : `${API_URL}${candidate.image_url.startsWith('/') ? '' : '/'}${candidate.image_url}`} 
+                            src={candidate.image_url.startsWith('http') ? candidate.image_url : `${BACKEND_URL}${candidate.image_url.startsWith('/') ? '' : '/'}${candidate.image_url}`} 
                             alt={candidate.name} 
                             className="w-full h-full object-cover transition-opacity duration-300"
                             style={{ opacity: 0 }}

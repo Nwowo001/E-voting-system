@@ -6,9 +6,9 @@ import { FaCheck, FaArrowLeft, FaVoteYea, FaUsers, FaSpinner } from "react-icons
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useUserContext } from "../../../Context/UserContext";
+import { API_URL, SOCKET_URL, BACKEND_URL } from "../../../config";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const socket = io(import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api$/, ""), { withCredentials: true, transports: ["websocket", "polling"] });
+const socket = io(SOCKET_URL, { withCredentials: true, transports: ["websocket", "polling"] });
 
 const ElectionCandidates = () => {
   const { electionId } = useParams();
@@ -294,7 +294,7 @@ const ElectionCandidates = () => {
                 {/* Candidate image */}
                 <div className="aspect-[4/3] bg-gradient-to-br from-indigo-500/20 to-violet-500/20 relative overflow-hidden">
                   <img
-                    src={candidate.image_url?.startsWith('http') ? candidate.image_url : `${API_URL}${candidate.image_url?.startsWith('/') ? '' : '/'}${candidate.image_url}`}
+                    src={candidate.image_url?.startsWith('http') ? candidate.image_url : `${BACKEND_URL}${candidate.image_url?.startsWith('/') ? '' : '/'}${candidate.image_url}`}
                     alt={candidate.name}
                     loading="lazy"
                     className="w-full h-full object-cover transition-opacity duration-500"
