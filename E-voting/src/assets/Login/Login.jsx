@@ -14,8 +14,9 @@ import {
   FaArrowLeft,
   FaKey,
 } from "react-icons/fa";
+import { API_URL as BASE_API_URL } from "../../config";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000/api") + "/users";
+const API_URL = BASE_API_URL + "/users";
 
 const getPasswordStrength = (pass) => {
   if (!pass) return { score: 0, label: "", color: "bg-slate-500/20", progress: "w-0" };

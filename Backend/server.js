@@ -40,7 +40,10 @@ if (!process.env.JWT_SECRET) {
 }
 
 const PORT = process.env.PORT || 5000;
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+let FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+if (typeof FRONTEND_URL === "string" && FRONTEND_URL.endsWith("/")) {
+  FRONTEND_URL = FRONTEND_URL.slice(0, -1);
+}
 
 const httpServer = createServer(app);
 const __filename = fileURLToPath(import.meta.url);

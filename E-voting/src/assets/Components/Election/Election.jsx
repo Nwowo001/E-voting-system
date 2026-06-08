@@ -20,8 +20,7 @@ import {
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { format } from "date-fns";
-
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "../../../config";
 
 const Election = () => {
   const [elections, setElections] = useState([]);

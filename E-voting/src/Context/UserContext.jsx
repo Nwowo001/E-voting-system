@@ -7,6 +7,7 @@ import {
 } from "react";
 import PropTypes from "prop-types";
 import { io } from "socket.io-client";
+import { SOCKET_URL } from "../config";
 
 const UserContext = createContext(undefined);
 
@@ -14,7 +15,7 @@ let socketInstance = null;
 
 const getSocket = () => {
   if (!socketInstance) {
-    socketInstance = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000", {
+    socketInstance = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       reconnection: true,
     });

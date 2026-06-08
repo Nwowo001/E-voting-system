@@ -20,8 +20,7 @@ import {
   FaUser,
   FaSpinner
 } from "react-icons/fa";
-
-const API_URL = "http://localhost:5000/api";
+import { API_URL, BACKEND_URL } from "../../../config";
 
 const Candidate = () => {
   const { user } = useUserContext();
@@ -533,7 +532,7 @@ const Candidate = () => {
                           // Only prepend the local server for relative /uploads/... paths.
                           candidate.image_url.startsWith('http')
                             ? candidate.image_url
-                            : `http://localhost:5000${candidate.image_url}`
+                            : `${BACKEND_URL}${candidate.image_url}`
                         }
                         alt={candidate.name} 
                         loading="lazy"

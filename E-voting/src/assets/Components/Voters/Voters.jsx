@@ -22,8 +22,7 @@ import {
   FaUserEdit,
   FaSpinner
 } from "react-icons/fa";
-
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "../../../config";
 
 const Voters = () => {
   const [voters, setVoters] = useState([]);

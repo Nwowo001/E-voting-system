@@ -23,8 +23,7 @@ import {
   FaCheckCircle,
   FaTimesCircle
 } from "react-icons/fa";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_URL, BACKEND_URL } from "../../config";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -94,7 +93,7 @@ const Profile = () => {
         const imageUrl = userData.profile_image;
         const fullImageUrl = imageUrl.startsWith('http') ? 
           imageUrl : 
-          `${API_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+          `${BACKEND_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
         
         if (imageUrlRef.current !== fullImageUrl) {
           imageUrlRef.current = fullImageUrl;
@@ -173,7 +172,7 @@ const Profile = () => {
         const imageUrl = response.data.imageUrl;
         const fullImageUrl = imageUrl.startsWith('http') ? 
           imageUrl : 
-          `${API_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+          `${BACKEND_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
         
         imageUrlRef.current = fullImageUrl;
         setProfileImage(fullImageUrl);
