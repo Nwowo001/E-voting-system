@@ -16,7 +16,7 @@ let socketInstance = null;
 const getSocket = () => {
   if (!socketInstance) {
     socketInstance = io(SOCKET_URL, {
-      transports: ["websocket", "polling"],
+      transports: ["websocket"],
       reconnection: true,
     });
   }

@@ -13,6 +13,7 @@ export const pool = new Pool({
   max: 20,                  // max simultaneous DB connections
   idleTimeoutMillis: 30000, // close idle connections after 30s
   connectionTimeoutMillis: 5000, // fail fast if no connection available in 5s
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
 });
 
 pool.on("error", (err) => {

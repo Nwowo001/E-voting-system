@@ -10,7 +10,7 @@ import {
 
 import { API_URL, SOCKET_URL } from "../../config";
 
-const socket = io(SOCKET_URL, { transports: ["websocket", "polling"] });
+const socket = io(SOCKET_URL, { transports: ["websocket"] });
 
 const LiveBadge = () => (
   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30">
