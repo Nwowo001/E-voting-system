@@ -56,3 +56,10 @@ CREATE TABLE IF NOT EXISTS otps (
 
 CREATE INDEX IF NOT EXISTS idx_otps_email ON otps(email);
 
+-- Add missing columns to candidates table
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS matric_number VARCHAR(50);
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS position VARCHAR(100) DEFAULT '';
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS biography TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS manifesto TEXT;
+
+

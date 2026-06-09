@@ -94,13 +94,9 @@ const io = new Server(httpServer, {
 
 io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
-  socket.on("vote_cast", async (data) => {
-    try {
-      const result = await recordVote(data);
-      io.emit("vote_updated", result);
-    } catch (error) {
-      socket.emit("vote_error", error.message);
-    }
+  socket.on("vote_cast", (data) => {
+    // Broadcast to other clients that a vote was cast to trigger real-time UI updates
+    socket.broadcast.emit("vote_cast", data);
   });
   socket.on("disconnect", () => {
     console.log(`Client disconnected: ${socket.id}`);
