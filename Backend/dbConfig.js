@@ -22,22 +22,11 @@ pool.on("error", (err) => {
 });
 
 // Test the connection
-pool.connect((err, client, release) => {
-  if (err) {
-    return console.error("Error acquiring client", err.stack);
-  }
-  client.query("SELECT NOW()", (err, result) => {
-    release();
-    if (err) {
-      return console.error("Error executing query", err.stack);
-    }
-    console.log("Connected to database:", result.rows[0]);
-  });
-});
-pool.connect((err) => {
+pool.query("SELECT NOW()", (err, result) => {
   if (err) {
     console.error("Error connecting to the database:", err.stack);
   } else {
-    console.log("Connected to the database successfully!");
+    console.log("Connected to database successfully:", result.rows[0]);
   }
 });
+
