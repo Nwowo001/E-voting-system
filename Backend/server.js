@@ -40,10 +40,21 @@ if (!process.env.JWT_SECRET) {
 }
 
 const PORT = process.env.PORT || 5000;
-let FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-if (typeof FRONTEND_URL === "string" && FRONTEND_URL.endsWith("/")) {
-  FRONTEND_URL = FRONTEND_URL.slice(0, -1);
-}
+const FRONTEND_URL = process.env.FRONTEND_URL || "";
+const envOrigins = FRONTEND_URL.split(",")
+  .map(url => url.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5000",
+  "https://e-voting-system-tau.vercel.app",
+  "https://www.acuvote.com.ng",
+  "https://acuvote.com.ng",
+  ...envOrigins
+];
 
 const httpServer = createServer(app);
 const __filename = fileURLToPath(import.meta.url);
@@ -51,7 +62,15 @@ const __dirname = path.dirname(__filename);
 // Configure CORS before any routes
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes("*")) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
