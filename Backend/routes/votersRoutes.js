@@ -27,7 +27,7 @@ router.get('/', authenticateToken, adminOnly, async (req, res) => {
 router.put('/:id/verify', authenticateToken, adminOnly, async (req, res) => {
   try {
     const result = await pool.query(
-      'UPDATE users SET verified = true WHERE id = $1 AND role = $2 RETURNING id, name, email',
+      'UPDATE users SET is_verified = true WHERE id = $1 AND role = $2 RETURNING id, name, email',
       [req.params.id, 'voter']
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Voter not found' });

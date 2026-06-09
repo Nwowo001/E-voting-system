@@ -37,9 +37,13 @@ CREATE TABLE candidates (
     candidateid SERIAL PRIMARY KEY,
     electionid INTEGER REFERENCES elections(electionid) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
-    party VARCHAR(100) NOT NULL,
+    party VARCHAR(100) DEFAULT '',
     image_url TEXT,
     vote_count INTEGER DEFAULT 0,
+    matric_number VARCHAR(50),
+    position VARCHAR(100) DEFAULT '',
+    biography TEXT,
+    manifesto TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
