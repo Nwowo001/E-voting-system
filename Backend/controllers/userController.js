@@ -32,20 +32,48 @@ const loadEligibleVoters = () => {
   if (!fs.existsSync(xlsxPath)) return null;
 
   const workbook = XLSX.readFile(xlsxPath);
-  const voters = new Map(); // matric → { surname, firstName, otherName }
+  const voters = new Map(); // matric → { surname, firstName, otherName, email, officialMatric }
 
   workbook.SheetNames.forEach((sheetName) => {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    rows.forEach((row) => {
+    
+    // Skip header row (index 0)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
       const matric = String(row[0] ?? '').trim().toUpperCase();
       const rawName = String(row[1] ?? '').trim();
-      if (matric && rawName) {
-        voters.set(matric, parseName(rawName));
-      } else if (matric) {
-        voters.set(matric, { surname: '', firstName: '', otherName: '' });
+
+      if (!matric) continue;
+
+      let altMatric = '';
+      let email = '';
+      if (sheetName === '100') {
+        altMatric = String(row[2] ?? '').trim().toUpperCase();
+        email = String(row[3] ?? '').trim().toLowerCase();
+      } else {
+        email = String(row[2] ?? '').trim().toLowerCase();
       }
-    });
+
+      // Safeguard in case AltMatric column header name leaks down (should not happen)
+      if (altMatric === 'ALTERNATIVE MATRIC NUMBER') {
+        altMatric = '';
+      }
+
+      const parsed = parseName(rawName);
+      const voterInfo = {
+        surname: parsed.surname,
+        firstName: parsed.firstName,
+        otherName: parsed.otherName,
+        email: email || null,
+        officialMatric: matric
+      };
+
+      voters.set(matric, voterInfo);
+      if (altMatric) {
+        voters.set(altMatric, voterInfo);
+      }
+    }
   });
 
   return voters;
@@ -95,6 +123,20 @@ export const signUp = async (req, res) => {
   if (!passwordPattern.test(password)) {
     return res.status(400).json({ message: 'Password must be at least 6 characters long and include both letters and numbers.' });
   }
+
+  // --- Allowed email domain validation ---
+  if (process.env.ALLOWED_EMAIL_DOMAINS) {
+    const domain = email.split('@')[1]?.toLowerCase();
+    const allowed = process.env.ALLOWED_EMAIL_DOMAINS.split(',')
+      .map(d => d.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowed.length > 0 && !allowed.includes(domain)) {
+      return res.status(400).json({
+        message: `Only official emails ending with ${process.env.ALLOWED_EMAIL_DOMAINS} are allowed to register.`,
+      });
+    }
+  }
+
   // --- Matric number format validation ---
   if (!isValidMatricFormat(matric_number)) {
     return res.status(400).json({
@@ -117,6 +159,18 @@ export const signUp = async (req, res) => {
         message: 'Your matric number is not in the list of eligible voters.',
       });
     }
+
+    // Retrieve official matric and email details from the Excel list
+    const voter = eligibleVoters.get(matricKey);
+    const resolvedMatric = voter.officialMatric;
+
+    // Enforce that if a student has an email on file in Excel, they MUST sign up with that email
+    if (voter.email && voter.email !== email.trim().toLowerCase()) {
+      return res.status(400).json({
+        message: `This matric number must be registered with the official email address on file (${voter.email.substring(0, 2)}***${voter.email.split('@')[0].slice(-1)}@${voter.email.split('@')[1]}).`,
+      });
+    }
+
   } catch (xlsxError) {
     console.error('⛔ Error reading eligible_voters.xlsx:', xlsxError.message);
     return res.status(503).json({
@@ -125,26 +179,76 @@ export const signUp = async (req, res) => {
   }
 
   try {
+    const eligibleVoters = loadEligibleVoters();
+    const matricKey = matric_number.trim().toUpperCase();
+    const voter = eligibleVoters.get(matricKey);
+    const resolvedMatric = voter.officialMatric;
+
+    // Check if user with this matric number already exists using the resolved matric number
     const userExists = await pool.query(
       'SELECT * FROM users WHERE matric_number = $1',
-      [matric_number]
+      [resolvedMatric]
     );
+
     if (userExists.rows.length > 0) {
-      return res.status(409).json({ message: 'Matric number already registered.' });
+      const existingUser = userExists.rows[0];
+
+      // If the user account is already verified, block registration
+      if (existingUser.is_verified) {
+        return res.status(409).json({ message: 'Matric number already registered.' });
+      }
+
+      // If the account is unverified, allow updating email/password/name
+      // (this resolves typo issues and lets the owner reclaim their unverified matric number)
+      const emailTaken = await pool.query(
+        'SELECT * FROM users WHERE email = $1 AND matric_number != $2',
+        [email, resolvedMatric]
+      );
+      if (emailTaken.rows.length > 0) {
+        return res.status(409).json({ message: 'Email already registered.' });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await pool.query(
+        `UPDATE users 
+         SET name = $1, email = $2, password = $3, display_name = $1
+         WHERE matric_number = $4`,
+        [name, email, hashedPassword, resolvedMatric]
+      );
+
+      // Clean up old OTPs for both the old and new emails
+      await pool.query('DELETE FROM otps WHERE email = $1 OR email = $2', [existingUser.email, email]);
+
+      // Generate and save new OTP
+      const otp = generateOTP();
+      await pool.query(
+        `INSERT INTO otps (email, code, expires_at, type) 
+         VALUES ($1, $2, NOW() + INTERVAL '15 minutes', 'registration')`,
+        [email, otp]
+      );
+
+      // Send verification email
+      await sendOTPEmail(email, otp, 'registration');
+
+      return res.status(200).json({
+        message: 'Account details updated. Verification code sent to your new email.',
+        email: email,
+        requiresVerification: true
+      });
     }
-    
+
+    // Standard registration flow for new matric numbers
     const emailExists = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (emailExists.rows.length > 0) {
       return res.status(409).json({ message: 'Email already registered.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await pool.query(
+    await pool.query(
       `INSERT INTO users (name, email, password, matric_number, role, display_name, is_verified)
-       VALUES ($1, $2, $3, $4, 'voter', $1, false) RETURNING id, name, email, role, matric_number`,
-      [name, email, hashedPassword, matric_number]
+       VALUES ($1, $2, $3, $4, 'voter', $1, false)`,
+      [name, email, hashedPassword, resolvedMatric]
     );
-    const newUser = result.rows[0];
 
     // Generate and save OTP for verification
     const otp = generateOTP();
@@ -312,9 +416,15 @@ export const login = async (req, res) => {
     return res.status(400).json({ message: 'Identifier and password are required.' });
   }
   try {
+    const eligibleVoters = loadEligibleVoters();
+    const lookupKey = identifier.trim().toUpperCase();
+    const resolvedIdentifier = (eligibleVoters && eligibleVoters.has(lookupKey)) 
+      ? eligibleVoters.get(lookupKey).officialMatric 
+      : identifier;
+
     const result = await pool.query(
-      'SELECT * FROM users WHERE matric_number = $1 OR email = $1 OR staff_id = $1',
-      [identifier]
+      'SELECT * FROM users WHERE matric_number = $1 OR email = $2 OR staff_id = $3',
+      [resolvedIdentifier, identifier, identifier]
     );
     if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -487,8 +597,15 @@ export const verifyMatric = (req, res) => {
       return res.status(404).json({ message: 'Matric number not found in eligible voter list.' });
     }
 
-    const { surname, firstName, otherName } = eligibleVoters.get(key);
-    return res.status(200).json({ surname, firstName, otherName });
+    const voter = eligibleVoters.get(key);
+    const { surname, firstName, otherName, email, officialMatric } = voter;
+    return res.status(200).json({ 
+      surname, 
+      firstName, 
+      otherName, 
+      email, 
+      officialMatric 
+    });
   } catch (err) {
     console.error('verifyMatric error:', err.message);
     return res.status(500).json({ message: 'Failed to verify matric number.' });

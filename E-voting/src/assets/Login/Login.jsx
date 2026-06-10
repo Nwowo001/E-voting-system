@@ -79,6 +79,7 @@ const Login = () => {
   });
   const [matricVerified, setMatricVerified] = useState(false);
   const [verifyingMatric, setVerifyingMatric] = useState(false);
+  const [emailLocked, setEmailLocked] = useState(false);
   const [forgotForm, setForgotForm] = useState({ email: "" });
   const [resetForm, setResetForm] = useState({
     code: "",
@@ -174,17 +175,26 @@ const Login = () => {
       const res = await axios.post(`${API_URL}/verify-matric`, {
         matric_number: signupForm.matric_number,
       });
-      const { surname, firstName, otherName } = res.data;
+      const { surname, firstName, otherName, email, officialMatric } = res.data;
       setSignupForm((prev) => ({
         ...prev,
         surname: surname || "",
         firstName: firstName || "",
         otherName: otherName || "",
+        email: email || "",
+        matric_number: officialMatric || prev.matric_number,
       }));
       setMatricVerified(true);
-      setSuccess("Matric number verified! Your name has been filled in below.");
+      if (email) {
+        setEmailLocked(true);
+        setSuccess("Matric number verified! Your name and locked email have been filled in below.");
+      } else {
+        setEmailLocked(false);
+        setSuccess("Matric number verified! Your name has been filled in. Please enter your email below.");
+      }
     } catch (err) {
       setMatricVerified(false);
+      setEmailLocked(false);
       setError(
         err.response?.data?.message ||
           "Matric number not found. Only eligible students can register."
@@ -246,6 +256,7 @@ const Login = () => {
         confirmPassword: "",
       });
       setMatricVerified(false);
+      setEmailLocked(false);
       startResendTimer();
     } catch (err) {
       setError(
@@ -805,8 +816,9 @@ const Login = () => {
                           name="matric_number"
                           value={signupForm.matric_number}
                           onChange={(e) => {
-                            setSignupForm({ ...signupForm, matric_number: e.target.value.toUpperCase(), surname: "", firstName: "", otherName: "" });
+                            setSignupForm({ ...signupForm, matric_number: e.target.value.toUpperCase(), surname: "", firstName: "", otherName: "", email: "" });
                             setMatricVerified(false);
+                            setEmailLocked(false);
                             setSuccess("");
                           }}
                           placeholder="e.g. 22N02001 or ACU20251815"
@@ -895,14 +907,21 @@ const Login = () => {
                       Email Address
                     </label>
                     <div className="relative">
-                      <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted text-sm" />
+                      <FaEnvelope className={`absolute left-4 top-1/2 -translate-y-1/2 text-sm transition-colors duration-200 ${
+                        emailLocked ? "text-emerald-500/70" : "text-text-muted"
+                      }`} />
                       <input
                         type="email"
                         name="email"
                         value={signupForm.email}
                         onChange={handleSignupChange}
+                        readOnly={emailLocked}
                         placeholder="e.g. john@university.edu"
-                        className="w-full pl-11 pr-4 py-3 rounded-xl bg-surface/50 border border-border text-text placeholder-text-muted/50 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 text-sm outline-none"
+                        className={`w-full pl-11 pr-4 py-3 rounded-xl transition-all duration-200 text-sm outline-none ${
+                          emailLocked
+                            ? "bg-emerald-500/5 border border-emerald-500/25 text-text cursor-not-allowed font-semibold focus:ring-0"
+                            : "bg-surface/50 border border-border text-text placeholder-text-muted/50 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        }`}
                         required
                       />
                     </div>
