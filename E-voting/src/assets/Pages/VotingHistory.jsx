@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { FaArrowLeft, FaHistory, FaCheckCircle, FaTimesCircle, FaPoll, FaSpinner } from "react-icons/fa";
+import {
+  FaArrowLeft,
+  FaHistory,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaPoll,
+  FaSpinner,
+} from "react-icons/fa";
 
 import { API_URL } from "../../config";
 
@@ -26,9 +33,9 @@ const VotingHistory = () => {
       const token = localStorage.getItem("token");
       const res = await axios.get(`${API_URL}/voters/participation`, {
         headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true
+        withCredentials: true,
       });
-      
+
       setParticipation(res.data);
       calculateStats(res.data);
     } catch (err) {
@@ -41,7 +48,8 @@ const VotingHistory = () => {
   const calculateStats = (data) => {
     const totalVoted = data.filter((item) => item.has_voted).length;
     const totalMissed = data.length - totalVoted;
-    const participationRate = data.length > 0 ? (totalVoted / data.length) * 100 : 0;
+    const participationRate =
+      data.length > 0 ? (totalVoted / data.length) * 100 : 0;
 
     setStats({
       totalVoted,
@@ -77,9 +85,13 @@ const VotingHistory = () => {
             </button>
             <div>
               <h1 className="text-xl font-bold text-text flex items-center gap-2">
-                <FaHistory className="text-indigo-400" /> Voting Participation Ledger
+                <FaHistory className="text-indigo-400" /> Voting Participation
+                Ledger
               </h1>
-              <p className="text-text-muted text-sm">Under ballot secrecy rules, we only log participation, not your personal candidate choice</p>
+              <p className="text-text-muted text-sm">
+                Under ballot secrecy rules, we only log participation, not your
+                personal candidate choice
+              </p>
             </div>
           </div>
 
@@ -99,16 +111,24 @@ const VotingHistory = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-surface/20 border border-border rounded-2xl p-5 backdrop-blur-xl">
-            <p className="text-text-muted text-xs font-medium uppercase tracking-wider mb-1">Elections Voted</p>
+            <p className="text-text-muted text-xs font-medium uppercase tracking-wider mb-1">
+              Elections Voted
+            </p>
             <p className="text-2xl font-bold text-text">{stats.totalVoted}</p>
           </div>
           <div className="bg-surface/20 border border-border rounded-2xl p-5 backdrop-blur-xl">
-            <p className="text-text-muted text-xs font-medium uppercase tracking-wider mb-1">Elections Missed</p>
+            <p className="text-text-muted text-xs font-medium uppercase tracking-wider mb-1">
+              Elections Missed
+            </p>
             <p className="text-2xl font-bold text-text">{stats.totalMissed}</p>
           </div>
           <div className="bg-surface/20 border border-border rounded-2xl p-5 backdrop-blur-xl">
-            <p className="text-text-muted text-xs font-medium uppercase tracking-wider mb-1">Participation Rate</p>
-            <p className="text-2xl font-bold text-emerald-400">{stats.participationRate}%</p>
+            <p className="text-text-muted text-xs font-medium uppercase tracking-wider mb-1">
+              Participation Rate
+            </p>
+            <p className="text-2xl font-bold text-emerald-400">
+              {stats.participationRate}%
+            </p>
           </div>
         </div>
 
@@ -116,9 +136,14 @@ const VotingHistory = () => {
         <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-5 flex items-start gap-4">
           <div className="text-2xl text-indigo-400 mt-0.5 shrink-0">🛡️</div>
           <div>
-            <h3 className="text-text font-bold text-sm">Ballot Secrecy Guarantee</h3>
+            <h3 className="text-text font-bold text-sm">
+              Ballot Secrecy Guarantee
+            </h3>
             <p className="text-indigo-300/80 text-xs mt-1 leading-relaxed">
-              Your individual vote is cryptographically decoupled from your identity. The system only marks that your account has successfully checked in to vote to prevent double voting. No candidate choice log is linked to your name in the database.
+              Your individual vote is cryptographically decoupled from your
+              identity. The system only marks that your account has successfully
+              checked in to vote to prevent double voting. No candidate choice
+              log is linked to your name in the database.
             </p>
           </div>
         </div>
@@ -127,7 +152,9 @@ const VotingHistory = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 bg-surface/20 border border-border rounded-2xl">
             <FaSpinner className="text-3xl text-indigo-500 animate-spin mb-3" />
-            <p className="text-text-muted text-sm">Querying ledger records...</p>
+            <p className="text-text-muted text-sm">
+              Querying ledger records...
+            </p>
           </div>
         ) : error ? (
           <div className="text-center py-16 bg-surface/20 border border-red-500/20 rounded-2xl">
@@ -137,8 +164,12 @@ const VotingHistory = () => {
         ) : filteredHistory.length === 0 ? (
           <div className="text-center py-16 bg-surface/20 border border-border rounded-2xl">
             <FaPoll className="text-5xl text-slate-600 mx-auto mb-3" />
-            <h3 className="text-text font-bold text-base mb-1">No ledger entries</h3>
-            <p className="text-text-muted text-sm">No participations were recorded in this filter category.</p>
+            <h3 className="text-text font-bold text-base mb-1">
+              No ledger entries
+            </h3>
+            <p className="text-text-muted text-sm">
+              No participations were recorded in this filter category.
+            </p>
           </div>
         ) : (
           <div className="bg-surface/20 border border-border rounded-2xl overflow-hidden backdrop-blur-xl">
@@ -154,10 +185,21 @@ const VotingHistory = () => {
                 </thead>
                 <tbody className="divide-y divide-border/50 text-sm text-text-muted">
                   {filteredHistory.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-surface/[0.02] transition-all">
-                      <td className="p-4 font-semibold text-text">{item.title}</td>
+                    <tr
+                      key={idx}
+                      className="hover:bg-surface/[0.02] transition-all"
+                    >
+                      <td className="p-4 font-semibold text-text">
+                        {item.title}
+                      </td>
                       <td className="p-4 text-xs text-text-muted">
-                        {new Date(item.start_date + "T00:00:00").toLocaleDateString()} — {new Date(item.end_date + "T00:00:00").toLocaleDateString()}
+                        {new Date(
+                          item.start_date + "T00:00:00",
+                        ).toLocaleDateString()}{" "}
+                        —{" "}
+                        {new Date(
+                          item.end_date + "T00:00:00",
+                        ).toLocaleDateString()}
                       </td>
                       <td className="p-4">
                         {item.isactive ? (
@@ -174,11 +216,13 @@ const VotingHistory = () => {
                         <div className="flex items-center justify-center">
                           {item.has_voted ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              <FaCheckCircle className="text-emerald-400 text-xs" /> Voted & Recorded
+                              <FaCheckCircle className="text-emerald-400 text-xs" />{" "}
+                              Voted & Recorded
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                              <FaTimesCircle className="text-rose-400 text-xs" /> Missed Ballot
+                              <FaTimesCircle className="text-rose-400 text-xs" />{" "}
+                              Missed Ballot
                             </span>
                           )}
                         </div>

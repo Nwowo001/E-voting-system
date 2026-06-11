@@ -7,7 +7,7 @@ import { useUserContext } from "../../Context/UserContext";
 
 import { API_URL, SOCKET_URL, BACKEND_URL } from "../../config";
 
-const socket = io(SOCKET_URL, { withCredentials: true, transports: ["websocket"] });
+const socket = io(SOCKET_URL, { withCredentials: true, transports: ["polling", "websocket"] });
 
 const Candidates = () => {
   const navigate = useNavigate();
