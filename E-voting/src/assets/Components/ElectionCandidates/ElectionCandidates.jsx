@@ -2,19 +2,28 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
-import { FaCheck, FaArrowLeft, FaVoteYea, FaUsers, FaSpinner } from "react-icons/fa";
+import {
+  FaCheck,
+  FaArrowLeft,
+  FaVoteYea,
+  FaUsers,
+  FaSpinner,
+} from "react-icons/fa";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 import { useUserContext } from "../../../Context/UserContext";
 import { API_URL, SOCKET_URL, BACKEND_URL } from "../../../config";
 
-const socket = io(SOCKET_URL, { withCredentials: true, transports: ["websocket"] });
+const socket = io(SOCKET_URL, {
+  withCredentials: true,
+  transports: ["polling", "websocket"],
+});
 
 const ElectionCandidates = () => {
   const { electionId } = useParams();
   const navigate = useNavigate();
   const { user } = useUserContext();
-  
+
   useEffect(() => {
     if (user && user.role === "candidate") {
       navigate("/dashboard");
@@ -27,17 +36,21 @@ const ElectionCandidates = () => {
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  
+
   // Voting Verification OTP states
   const [verificationStep, setVerificationStep] = useState("confirm"); // 'confirm' or 'otp'
   const [otpCode, setOtpCode] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
-  const [receiptId] = useState(() => `ACU-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [receiptId] = useState(
+    () => `ACU-${Math.floor(100000 + Math.random() * 900000)}`,
+  );
 
   useEffect(() => {
     fetchCandidates();
 
-    socket.on("connect_error", () => setError("Connection issue. Please refresh."));
+    socket.on("connect_error", () =>
+      setError("Connection issue. Please refresh."),
+    );
     socket.on("vote_recorded", () => fetchCandidates());
 
     return () => {
@@ -78,12 +91,18 @@ const ElectionCandidates = () => {
       await axios.post(
         `${API_URL}/voters/request-otp`,
         { electionid: parseInt(electionId) },
-        { withCredentials: true, headers: { Authorization: `Bearer ${token}` } }
+        {
+          withCredentials: true,
+          headers: { Authorization: `Bearer ${token}` },
+        },
       );
       setVerificationStep("otp");
       startResendTimer();
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to request voting verification code.");
+      setError(
+        err.response?.data?.error ||
+          "Failed to request voting verification code.",
+      );
       setConfirming(false);
     } finally {
       setVoting(false);
@@ -103,17 +122,25 @@ const ElectionCandidates = () => {
       const token = localStorage.getItem("token");
       await axios.post(
         `${API_URL}/voters/votes`,
-        { 
-          candidateid: selectedCandidate, 
+        {
+          candidateid: selectedCandidate,
           electionid: parseInt(electionId),
-          otp: otpCode 
+          otp: otpCode,
         },
-        { withCredentials: true, headers: { Authorization: `Bearer ${token}` } }
+        {
+          withCredentials: true,
+          headers: { Authorization: `Bearer ${token}` },
+        },
       );
-      socket.emit("vote_cast", { electionId: parseInt(electionId), candidateId: selectedCandidate });
+      socket.emit("vote_cast", {
+        electionId: parseInt(electionId),
+        candidateId: selectedCandidate,
+      });
       setSuccessMessage("Your vote has been cast successfully! 🎉");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to cast vote. Please try again.");
+      setError(
+        err.response?.data?.error || "Failed to cast vote. Please try again.",
+      );
       setVerificationStep("confirm");
       setConfirming(false);
     } finally {
@@ -132,24 +159,28 @@ const ElectionCandidates = () => {
     html2canvas(receiptElement, {
       scale: 2,
       useCORS: true,
-      backgroundColor: "#1e293b" // Force dark styled card background for receipt PDF
-    }).then((canvas) => {
-      if (actionButtons) actionButtons.style.display = "flex";
+      backgroundColor: "#1e293b", // Force dark styled card background for receipt PDF
+    })
+      .then((canvas) => {
+        if (actionButtons) actionButtons.style.display = "flex";
 
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a5");
-      const imgWidth = 128;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF("p", "mm", "a5");
+        const imgWidth = 128;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
-      pdf.save(`AcuVote_Receipt_${receiptId}.pdf`);
-    }).catch(err => {
-      if (actionButtons) actionButtons.style.display = "flex";
-      console.error("PDF download failed", err);
-    });
+        pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+        pdf.save(`AcuVote_Receipt_${receiptId}.pdf`);
+      })
+      .catch((err) => {
+        if (actionButtons) actionButtons.style.display = "flex";
+        console.error("PDF download failed", err);
+      });
   };
 
-  const selectedInfo = candidates.find(c => c.candidateid === selectedCandidate);
+  const selectedInfo = candidates.find(
+    (c) => c.candidateid === selectedCandidate,
+  );
 
   if (loading) {
     return (
@@ -165,7 +196,7 @@ const ElectionCandidates = () => {
   if (successMessage) {
     return (
       <div className="min-h-screen bg-bg text-text flex items-center justify-center p-4 transition-colors duration-300">
-        <div 
+        <div
           id="receipt-card"
           className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 sm:p-8 text-center shadow-2xl animate-scale-up"
         >
@@ -174,9 +205,11 @@ const ElectionCandidates = () => {
           </div>
           <h2 className="text-2xl font-bold text-text mb-2">Vote Cast!</h2>
           <p className="text-text-muted text-xs mb-6">{successMessage}</p>
-          
+
           <div className="bg-surface-2/40 border border-border/50 rounded-2xl p-5 text-left text-xs space-y-3 mb-6 font-medium">
-            <p className="text-indigo-400 font-bold uppercase tracking-wider text-[10px] border-b border-border/40 pb-1.5">Official Digital Ballot Receipt</p>
+            <p className="text-indigo-400 font-bold uppercase tracking-wider text-[10px] border-b border-border/40 pb-1.5">
+              Official Digital Ballot Receipt
+            </p>
             <div className="flex justify-between">
               <span className="text-text-muted">Receipt ID:</span>
               <span className="font-mono text-text font-bold">{receiptId}</span>
@@ -192,14 +225,16 @@ const ElectionCandidates = () => {
 
             <div className="flex justify-between">
               <span className="text-text-muted">Timestamp:</span>
-              <span className="text-text-muted">{new Date().toLocaleString()}</span>
+              <span className="text-text-muted">
+                {new Date().toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between pt-1 border-t border-border/40 text-[10px] text-emerald-400 font-semibold">
               <span>Security State:</span>
               <span>CRYPTOGRAPHICALLY SECURED</span>
             </div>
           </div>
-          
+
           <div id="receipt-actions" className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={downloadPDFReceipt}
@@ -238,7 +273,9 @@ const ElectionCandidates = () => {
           </button>
           <div>
             <h1 className="text-xl font-bold text-text">Cast Your Vote</h1>
-            <p className="text-text-muted text-sm font-medium">Select a candidate below — your choice is private and secure</p>
+            <p className="text-text-muted text-sm font-medium">
+              Select a candidate below — your choice is private and secure
+            </p>
           </div>
         </div>
 
@@ -252,8 +289,13 @@ const ElectionCandidates = () => {
         <div className="mb-6 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center gap-3">
           <div className="text-indigo-400 text-xl shrink-0">🔒</div>
           <div>
-            <p className="text-indigo-300 text-sm font-bold">Your vote is anonymous</p>
-            <p className="text-indigo-400/80 text-xs mt-0.5">Only the total count is recorded. Your individual choice is never linked to your identity.</p>
+            <p className="text-indigo-300 text-sm font-bold">
+              Your vote is anonymous
+            </p>
+            <p className="text-indigo-400/80 text-xs mt-0.5">
+              Only the total count is recorded. Your individual choice is never
+              linked to your identity.
+            </p>
           </div>
         </div>
 
@@ -261,16 +303,22 @@ const ElectionCandidates = () => {
         {candidates.length === 0 ? (
           <div className="text-center py-20 bg-surface/10 border border-border rounded-2xl">
             <FaUsers className="text-5xl text-text-muted mx-auto mb-4" />
-            <p className="text-text-muted">No candidates have been added for this election.</p>
+            <p className="text-text-muted">
+              No candidates have been added for this election.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-24">
             {candidates.map((candidate, index) => (
               <button
                 key={candidate.candidateid}
-                onClick={() => setSelectedCandidate(
-                  selectedCandidate === candidate.candidateid ? null : candidate.candidateid
-                )}
+                onClick={() =>
+                  setSelectedCandidate(
+                    selectedCandidate === candidate.candidateid
+                      ? null
+                      : candidate.candidateid,
+                  )
+                }
                 className={`relative group text-left rounded-2xl border transition-all duration-200 overflow-hidden cursor-pointer ${
                   selectedCandidate === candidate.candidateid
                     ? "border-indigo-500 bg-indigo-600/15 shadow-lg shadow-indigo-500/20 scale-[1.02]"
@@ -294,21 +342,28 @@ const ElectionCandidates = () => {
                 {/* Candidate image */}
                 <div className="aspect-[4/3] bg-gradient-to-br from-indigo-500/20 to-violet-500/20 relative overflow-hidden">
                   <img
-                    src={candidate.image_url?.startsWith('http') ? candidate.image_url : `${BACKEND_URL}${candidate.image_url?.startsWith('/') ? '' : '/'}${candidate.image_url}`}
+                    src={
+                      candidate.image_url?.startsWith("http")
+                        ? candidate.image_url
+                        : `${BACKEND_URL}${candidate.image_url?.startsWith("/") ? "" : "/"}${candidate.image_url}`
+                    }
                     alt={candidate.name}
                     loading="lazy"
                     className="w-full h-full object-cover transition-opacity duration-500"
                     style={{ opacity: 0 }}
                     onLoad={(e) => {
                       e.target.style.opacity = 1;
-                      const spinner = e.target.parentNode.querySelector('.image-spinner');
+                      const spinner =
+                        e.target.parentNode.querySelector(".image-spinner");
                       if (spinner) spinner.style.display = "none";
                     }}
-                    onError={e => {
+                    onError={(e) => {
                       e.target.style.display = "none";
-                      const spinner = e.target.parentNode.querySelector('.image-spinner');
+                      const spinner =
+                        e.target.parentNode.querySelector(".image-spinner");
                       if (spinner) spinner.style.display = "none";
-                      const fallback = e.target.parentNode.querySelector('.fallback-avatar');
+                      const fallback =
+                        e.target.parentNode.querySelector(".fallback-avatar");
                       if (fallback) fallback.style.display = "flex";
                     }}
                   />
@@ -331,7 +386,9 @@ const ElectionCandidates = () => {
 
                 {/* Candidate info */}
                 <div className="p-4 space-y-2">
-                  <h3 className="text-text font-bold text-base leading-tight">{candidate.name}</h3>
+                  <h3 className="text-text font-bold text-base leading-tight">
+                    {candidate.name}
+                  </h3>
 
                   {candidate.party && (
                     <div className="flex items-center gap-1.5">
@@ -354,12 +411,16 @@ const ElectionCandidates = () => {
                   )}
 
                   {/* Vote indicator */}
-                  <div className={`mt-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                    selectedCandidate === candidate.candidateid
-                      ? "text-indigo-400"
-                      : "text-text-muted/50"
-                  }`}>
-                    {selectedCandidate === candidate.candidateid ? "✓ Selected" : "Tap to select"}
+                  <div
+                    className={`mt-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      selectedCandidate === candidate.candidateid
+                        ? "text-indigo-400"
+                        : "text-text-muted/50"
+                    }`}
+                  >
+                    {selectedCandidate === candidate.candidateid
+                      ? "✓ Selected"
+                      : "Tap to select"}
                   </div>
                 </div>
               </button>
@@ -376,8 +437,12 @@ const ElectionCandidates = () => {
                   <FaVoteYea />
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Selected candidate</p>
-                  <p className="text-text font-bold text-sm truncate">{selectedInfo?.name}</p>
+                  <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">
+                    Selected candidate
+                  </p>
+                  <p className="text-text font-bold text-sm truncate">
+                    {selectedInfo?.name}
+                  </p>
                 </div>
               </div>
               <button
@@ -397,21 +462,27 @@ const ElectionCandidates = () => {
         {confirming && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-surface border border-border rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl animate-scale-up">
-              
               {verificationStep === "confirm" ? (
                 <>
                   <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center mx-auto mb-5">
                     <FaVoteYea className="text-amber-400 text-2xl" />
                   </div>
-                  <h3 className="text-xl font-bold text-text mb-2">Confirm Your Vote</h3>
-                  <p className="text-text-muted text-xs mb-1">You are voting for</p>
-                  <p className="text-text font-bold text-lg mb-1">{selectedInfo?.name}</p>
+                  <h3 className="text-xl font-bold text-text mb-2">
+                    Confirm Your Vote
+                  </h3>
+                  <p className="text-text-muted text-xs mb-1">
+                    You are voting for
+                  </p>
+                  <p className="text-text font-bold text-lg mb-1">
+                    {selectedInfo?.name}
+                  </p>
 
-                  
                   <div className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed text-left">
-                    ⚠️ To prevent duplicate voting and vote farming, a 6-digit verification code will be sent to your registered email to validate your ballot.
+                    ⚠️ To prevent duplicate voting and vote farming, a 6-digit
+                    verification code will be sent to your registered email to
+                    validate your ballot.
                   </div>
-                  
+
                   <div className="flex gap-3">
                     <button
                       onClick={() => setConfirming(false)}
@@ -425,24 +496,36 @@ const ElectionCandidates = () => {
                       disabled={voting}
                       className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-500/20"
                     >
-                      {voting ? <FaSpinner className="animate-spin" /> : "Send Code"}
+                      {voting ? (
+                        <FaSpinner className="animate-spin" />
+                      ) : (
+                        "Send Code"
+                      )}
                     </button>
                   </div>
                 </>
               ) : (
                 <form onSubmit={handleVote} className="space-y-4">
                   <div className="w-16 h-16 rounded-full bg-indigo-500/20 border-2 border-indigo-500/40 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-indigo-400 text-xl font-bold">🔐</span>
+                    <span className="text-indigo-400 text-xl font-bold">
+                      🔐
+                    </span>
                   </div>
-                  <h3 className="text-lg font-bold text-text">Enter Voting Code</h3>
-                  <p className="text-text-muted text-xs">A 6-digit verification code was sent to your email.</p>
-                  
+                  <h3 className="text-lg font-bold text-text">
+                    Enter Voting Code
+                  </h3>
+                  <p className="text-text-muted text-xs">
+                    A 6-digit verification code was sent to your email.
+                  </p>
+
                   <div>
                     <input
                       type="text"
                       maxLength={6}
                       value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                      onChange={(e) =>
+                        setOtpCode(e.target.value.replace(/\D/g, ""))
+                      }
                       placeholder="000000"
                       className="w-full px-4 py-3 rounded-xl bg-surface-2/50 border border-border text-text font-mono text-center text-xl tracking-[6px] focus:border-indigo-500 transition-all outline-none"
                       required
@@ -466,13 +549,21 @@ const ElectionCandidates = () => {
                       disabled={voting}
                       className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-500/20"
                     >
-                      {voting ? <><FaSpinner className="animate-spin" /> Casting...</> : "Cast Vote"}
+                      {voting ? (
+                        <>
+                          <FaSpinner className="animate-spin" /> Casting...
+                        </>
+                      ) : (
+                        "Cast Vote"
+                      )}
                     </button>
                   </div>
 
                   <div className="text-center pt-2 text-xs">
                     {resendTimer > 0 ? (
-                      <p className="text-text-muted">Resend code in {resendTimer}s</p>
+                      <p className="text-text-muted">
+                        Resend code in {resendTimer}s
+                      </p>
                     ) : (
                       <button
                         type="button"
