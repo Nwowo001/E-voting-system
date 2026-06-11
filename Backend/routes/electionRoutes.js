@@ -8,6 +8,8 @@ import {
   updateElection,
   toggleElectionStatus,
   getAllElections,
+  getElectionById,
+  fetchHistoricalData,
 } from "../controllers/electionController.js";
 import { authenticateToken, adminOnly } from "../middlewares/authMiddleware.js";
 import { pool } from "../dbConfig.js";
@@ -17,6 +19,8 @@ router.post("/", addElection);                                    // Create elec
 router.get("/", fetchElections);                                   // Fetch all elections
 router.get("/all", getAllElections);                               // Fetch all (alt)
 router.get("/results/:electionId", fetchElectionResults);         // Election results
+router.get("/:electionId", getElectionById);                      // Get specific election details
+router.get("/historical/:electionId", fetchHistoricalData);        // Get historical election data
 router.post("/vote", voteForCandidate);                           // Record a vote
 router.delete("/:electionId", deleteElection);                    // Delete election
 router.put("/:electionId", updateElection);                       // Update election

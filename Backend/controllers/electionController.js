@@ -299,3 +299,58 @@ export const getElectionTimeRemaining = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch time remaining." });
   }
 };
+
+export const getElectionById = async (req, res) => {
+  const { electionId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT
+        electionid,
+        title,
+        description,
+        TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+        TO_CHAR(end_date,   'YYYY-MM-DD') AS end_date,
+        start_time,
+        end_time,
+        isactive,
+        created_at,
+        CAST((SELECT COUNT(*) FROM users WHERE role = 'voter') AS integer) AS eligible_voters
+      FROM elections
+      WHERE electionid = $1`,
+      [electionId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Election not found." });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error("Error fetching election by ID:", error.message);
+    res.status(500).json({ error: "Failed to fetch election details." });
+  }
+};
+
+export const fetchHistoricalData = async (req, res) => {
+  const { electionId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT 
+        TO_CHAR(votetimestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
+        CAST(COUNT(*) AS integer) AS vote_count
+       FROM votes
+       WHERE electionid = $1
+       GROUP BY votetimestamp
+       ORDER BY votetimestamp ASC`,
+      [electionId]
+    );
+
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Error fetching historical data:", error.message);
+    res.status(500).json({ error: "Failed to fetch historical data." });
+  }
+};
+

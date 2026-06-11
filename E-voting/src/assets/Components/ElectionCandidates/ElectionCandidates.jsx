@@ -3,7 +3,7 @@ import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import { FaCheck, FaArrowLeft, FaVoteYea, FaUsers, FaSpinner } from "react-icons/fa";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 import { useUserContext } from "../../../Context/UserContext";
 import { API_URL, SOCKET_URL, BACKEND_URL } from "../../../config";
