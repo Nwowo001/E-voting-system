@@ -251,6 +251,7 @@ export const fetchElectionResults = async (req, res) => {
       SELECT 
         c.candidateid,
         c.name AS candidate_name,
+        c.position,
         COUNT(v.voteid) AS vote_count
       FROM 
         candidates c
@@ -261,7 +262,7 @@ export const fetchElectionResults = async (req, res) => {
       WHERE 
         c.electionid = $1
       GROUP BY 
-        c.candidateid, c.name
+        c.candidateid, c.name, c.position
       ORDER BY 
         vote_count DESC;
       `,
@@ -315,7 +316,8 @@ export const getElectionById = async (req, res) => {
         end_time,
         isactive,
         created_at,
-        CAST((SELECT COUNT(*) FROM users WHERE role = 'voter') AS integer) AS eligible_voters
+        CAST((SELECT COUNT(*) FROM users WHERE role = 'voter') AS integer) AS eligible_voters,
+        CAST((SELECT COUNT(*) FROM voters WHERE electionid = $1 AND has_voted = true) AS integer) AS total_voted
       FROM elections
       WHERE electionid = $1`,
       [electionId]

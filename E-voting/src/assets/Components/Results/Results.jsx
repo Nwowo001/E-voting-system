@@ -102,19 +102,25 @@ const Results = () => {
       const response = await fetch(`${API_URL}/elections/results/${electionId}`);
       const data = await response.json();
 
-      const totalVotes = data.reduce(
-        (sum, result) => sum + parseInt(result.vote_count || 0, 10),
-        0
-      );
+      // Group candidates by position to compute position-specific total votes
+      const positionTotals = {};
+      data.forEach((r) => {
+        const pos = r.position || "General";
+        positionTotals[pos] = (positionTotals[pos] || 0) + parseInt(r.vote_count || 0, 10);
+      });
 
-      const resultsWithPercentage = data.map((result) => ({
-        ...result,
-        percentage: (
-          (parseInt(result.vote_count || 0, 10) / (totalVotes || 1)) *
-          100
-        ).toFixed(1),
-        votes: parseInt(result.vote_count || 0, 10)
-      }));
+      const resultsWithPercentage = data.map((result) => {
+        const pos = result.position || "General";
+        const posTotal = positionTotals[pos] || 1;
+        return {
+          ...result,
+          percentage: (
+            (parseInt(result.vote_count || 0, 10) / posTotal) *
+            100
+          ).toFixed(1),
+          votes: parseInt(result.vote_count || 0, 10)
+        };
+      });
 
       const sortedResults = sortResults(resultsWithPercentage, sortOrder);
       setResults(sortedResults);
@@ -168,19 +174,24 @@ const Results = () => {
       const response = await fetch(`${API_URL}/elections/results/${electionId}`);
       const data = await response.json();
 
-      const totalVotes = data.reduce(
-        (sum, result) => sum + parseInt(result.vote_count || 0, 10),
-        0
-      );
+      const positionTotals = {};
+      data.forEach((r) => {
+        const pos = r.position || "General";
+        positionTotals[pos] = (positionTotals[pos] || 0) + parseInt(r.vote_count || 0, 10);
+      });
 
-      const resultsWithPercentage = data.map((result) => ({
-        ...result,
-        percentage: (
-          (parseInt(result.vote_count || 0, 10) / (totalVotes || 1)) *
-          100
-        ).toFixed(1),
-        votes: parseInt(result.vote_count || 0, 10)
-      }));
+      const resultsWithPercentage = data.map((result) => {
+        const pos = result.position || "General";
+        const posTotal = positionTotals[pos] || 1;
+        return {
+          ...result,
+          percentage: (
+            (parseInt(result.vote_count || 0, 10) / posTotal) *
+            100
+          ).toFixed(1),
+          votes: parseInt(result.vote_count || 0, 10)
+        };
+      });
 
       setComparisonResults(resultsWithPercentage);
     } catch (error) {
@@ -296,10 +307,11 @@ const Results = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ["Candidate", "Votes", "Percentage"];
+    const headers = ["Position", "Candidate", "Votes", "Percentage"];
     const csvContent = [
       headers.join(","),
       ...filteredResults.map(r => [
+        `"${r.position || 'General'}"`,
         `"${r.candidate_name}"`,
         r.votes,
         `"${r.percentage}%"`
@@ -386,9 +398,10 @@ const Results = () => {
 
   const renderTurnoutChart = () => {
     if (!electionDetails) return null;
+    const votedCount = electionDetails.total_voted || 0;
     const turnoutData = [
-      { name: 'Voted participation', value: results.reduce((sum, r) => sum + r.votes, 0) },
-      { name: 'Non-participants', value: Math.max(0, (electionDetails.eligible_voters || 0) - results.reduce((sum, r) => sum + r.votes, 0)) }
+      { name: 'Voted participation', value: votedCount },
+      { name: 'Non-participants', value: Math.max(0, (electionDetails.eligible_voters || 0) - votedCount) }
     ];
     
     return (
@@ -414,39 +427,56 @@ const Results = () => {
 
   const renderWinner = () => {
     if (!results.length) return null;
-    const winner = [...results].sort((a, b) => b.votes - a.votes)[0];
-    const totalVotes = results.reduce((sum, result) => sum + result.votes, 0);
-    const runnerUp = [...results].sort((a, b) => b.votes - a.votes)[1];
-    const winningMargin = runnerUp ? winner.votes - runnerUp.votes : winner.votes;
-    
-    return (
-      <div className="bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 rounded-2xl p-6 relative overflow-hidden backdrop-blur-xl">
-        <div className="absolute right-4 top-4 text-amber-400 text-5xl opacity-20">
-          <FaTrophy />
-        </div>
-        <div className="flex items-center gap-3 mb-4">
-          <FaTrophy className="text-amber-400 text-xl" />
-          <h3 className="text-text font-bold text-sm">Projected Winner</h3>
-        </div>
-        
-        <div className="space-y-1">
-          <p className="text-2xl font-bold text-text leading-tight">{winner.candidate_name}</p>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-6 border-t border-border/50 pt-4 text-xs">
-          <div>
-            <p className="text-text-muted">Winning Votes</p>
-            <p className="text-base font-bold text-text mt-0.5">
-              {winner.votes.toLocaleString()} <span className="text-xs text-emerald-400 font-semibold">({winner.percentage}%)</span>
-            </p>
+    // Group results by position
+    const grouped = results.reduce((acc, r) => {
+      const pos = r.position || "General";
+      if (!acc[pos]) acc[pos] = [];
+      acc[pos].push(r);
+      return acc;
+    }, {});
+
+    const winners = Object.entries(grouped).map(([pos, posResults]) => {
+      const sorted = [...posResults].sort((a, b) => b.votes - a.votes);
+      const winner = sorted[0];
+      const runnerUp = sorted[1];
+      const totalVotes = posResults.reduce((sum, r) => sum + r.votes, 0);
+      const winningMargin = runnerUp ? winner.votes - runnerUp.votes : winner.votes;
+      return { pos, winner, winningMargin, totalVotes };
+    });
+
+    return (
+      <div className="space-y-4">
+        {winners.map(({ pos, winner, winningMargin, totalVotes }) => (
+          <div key={pos} className="bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 rounded-2xl p-5 relative overflow-hidden backdrop-blur-xl">
+            <div className="absolute right-4 top-4 text-amber-400 text-4xl opacity-15">
+              <FaTrophy />
+            </div>
+            <div className="flex items-center gap-2.5 mb-3">
+              <FaTrophy className="text-amber-400 text-sm" />
+              <h3 className="text-text font-bold text-xs">Projected Winner - {pos}</h3>
+            </div>
+            
+            <div className="space-y-0.5">
+              <p className="text-lg font-bold text-text leading-tight">{winner.candidate_name}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4 border-t border-border/40 pt-3 text-[11px]">
+              <div>
+                <p className="text-text-muted">Winning Votes</p>
+                <p className="text-sm font-bold text-text mt-0.5">
+                  {winner.votes.toLocaleString()} <span className="text-[10px] text-emerald-400 font-semibold">({winner.percentage}%)</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-text-muted">Winning Margin</p>
+                <p className="text-sm font-bold text-text mt-0.5">
+                  +{winningMargin.toLocaleString()} <span className="text-[10px] text-indigo-400">({((winningMargin / (totalVotes || 1)) * 100).toFixed(1)}%)</span>
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-text-muted">Winning Margin</p>
-            <p className="text-base font-bold text-text mt-0.5">
-              +{winningMargin.toLocaleString()} <span className="text-xs text-indigo-400">({((winningMargin / (totalVotes || 1)) * 100).toFixed(1)}%)</span>
-            </p>
-          </div>
-        </div>
+        ))}
       </div>
     );
   };
@@ -623,48 +653,70 @@ const Results = () => {
 
           {/* Graphical standings vs Details table */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              {/* Graphic container */}
-              <div ref={chartRef} className="bg-surface/20 border border-border rounded-2xl p-6 backdrop-blur-xl">
-                <h3 className="text-text font-bold text-sm mb-4">Graphic Standings Representation</h3>
-                {chartType === "bar" ? renderBarChart(filteredResults) : chartType === "pie" ? renderPieChart(filteredResults) : renderTurnoutChart()}
-              </div>
-
-              {/* Detailed results logs */}
-              <div className="bg-surface/20 border border-border rounded-2xl p-6 backdrop-blur-xl overflow-hidden">
-                <h3 className="text-text font-bold text-sm mb-4">Ballot Audit Table</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-border bg-surface/10 font-semibold text-text-muted">
-                        <th className="p-3">Standing Rank</th>
-                        <th className="p-3">Contender Name</th>
-                        <th className="p-3 text-right">Votes Audited</th>
-                        <th className="p-3 text-right">Percentage Log</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50 text-text-muted">
-                      {filteredResults.map((result, idx) => (
-                        <tr key={idx} className={idx === 0 ? "bg-amber-500/5 text-amber-300" : "hover:bg-surface/10"}>
-                          <td className="p-3 font-bold">#{idx + 1} {idx === 0 && "🏆"}</td>
-                          <td className="p-3 font-semibold">{result.candidate_name}</td>
-                          <td className="p-3 text-right font-mono font-semibold">{result.votes.toLocaleString()}</td>
-                          <td className="p-3 text-right font-mono font-bold">{result.percentage}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-surface/10 font-bold text-text border-t border-border">
-                        <td colSpan="2" className="p-3">Total Auditor Log</td>
-                        <td className="p-3 text-right font-mono text-indigo-400">
-                          {filteredResults.reduce((sum, r) => sum + r.votes, 0).toLocaleString()}
-                        </td>
-                        <td className="p-3 text-right font-mono text-emerald-400">100%</td>
-                      </tr>
-                    </tfoot>
-                  </table>
+            <div className="lg:col-span-2 space-y-8" ref={chartRef}>
+              {chartType === "turnout" ? (
+                <div className="bg-surface/20 border border-border rounded-2xl p-6 backdrop-blur-xl">
+                  <h3 className="text-text font-bold text-sm mb-4">Voter Turnout Representation</h3>
+                  {renderTurnoutChart()}
                 </div>
-              </div>
+              ) : (
+                Object.entries(
+                  filteredResults.reduce((acc, result) => {
+                    const pos = result.position || "General";
+                    if (!acc[pos]) acc[pos] = [];
+                    acc[pos].push(result);
+                    return acc;
+                  }, {})
+                ).map(([position, posResults]) => (
+                  <div key={position} className="space-y-6 bg-surface/10 border border-border/60 rounded-3xl p-6 backdrop-blur-xl">
+                    <h3 className="text-base font-bold text-indigo-400 border-b border-border/30 pb-2 flex items-center gap-2">
+                      🎯 Position: {position}
+                    </h3>
+
+                    {/* Graphic container */}
+                    <div className="bg-surface/20 border border-border/40 rounded-2xl p-5">
+                      <h4 className="text-text font-bold text-xs mb-3">Graphic Standings</h4>
+                      {chartType === "bar" ? renderBarChart(posResults) : renderPieChart(posResults)}
+                    </div>
+
+                    {/* Detailed results logs */}
+                    <div className="bg-surface/20 border border-border/40 rounded-2xl p-5 overflow-hidden">
+                      <h4 className="text-text font-bold text-xs mb-3">Ballot Audit Table</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-border bg-surface/10 font-semibold text-text-muted">
+                              <th className="p-3">Standing Rank</th>
+                              <th className="p-3">Contender Name</th>
+                              <th className="p-3 text-right">Votes Audited</th>
+                              <th className="p-3 text-right">Percentage Log</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/50 text-text-muted">
+                            {posResults.map((result, idx) => (
+                              <tr key={idx} className={idx === 0 ? "bg-amber-500/5 text-amber-300" : "hover:bg-surface/10"}>
+                                <td className="p-3 font-bold">#{idx + 1} {idx === 0 && "🏆"}</td>
+                                <td className="p-3 font-semibold">{result.candidate_name}</td>
+                                <td className="p-3 text-right font-mono font-semibold">{result.votes.toLocaleString()}</td>
+                                <td className="p-3 text-right font-mono font-bold">{result.percentage}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-surface/10 font-bold text-text border-t border-border">
+                              <td colSpan="2" className="p-3">Total Auditor Log</td>
+                              <td className="p-3 text-right font-mono text-indigo-400">
+                                {posResults.reduce((sum, r) => sum + r.votes, 0).toLocaleString()}
+                              </td>
+                              <td className="p-3 text-right font-mono text-emerald-400">100%</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Sidebar stats logs */}
@@ -686,6 +738,10 @@ const Results = () => {
                   {electionDetails && (
                     <>
                       <div className="flex justify-between items-center py-1">
+                        <span className="text-text-muted">Total Voters Voted</span>
+                        <span className="text-text font-bold">{(electionDetails.total_voted || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1">
                         <span className="text-text-muted">Eligible Registered Voters</span>
                         <span className="text-text font-bold">{electionDetails.eligible_voters || "N/A"}</span>
                       </div>
@@ -693,7 +749,7 @@ const Results = () => {
                         <span className="text-text-muted">Participation Turnout Rate</span>
                         <span className="text-emerald-400 font-bold">
                           {electionDetails.eligible_voters 
-                            ? `${((results.reduce((sum, r) => sum + r.votes, 0) / electionDetails.eligible_voters) * 100).toFixed(1)}%` 
+                            ? `${(((electionDetails.total_voted || 0) / electionDetails.eligible_voters) * 100).toFixed(1)}%` 
                             : "N/A"}
                         </span>
                       </div>
