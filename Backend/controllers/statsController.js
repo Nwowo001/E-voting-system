@@ -73,10 +73,9 @@ export const getElectionStats = async (req, res) => {
         GROUP BY c.candidateid, c.name, c.party
       ),
       TotalVotes AS (
-        SELECT COUNT(DISTINCT voteid) as total_votes
-        FROM votes v
-        JOIN candidates c ON v.candidateid = c.candidateid
-        WHERE c.electionid = $1
+        SELECT COUNT(DISTINCT userid) as total_votes
+        FROM voters
+        WHERE electionid = $1 AND has_voted = true
       )
       SELECT 
         e.title,
@@ -152,11 +151,10 @@ export const getActiveElectionStats = async (req, res) => {
       TotalVotes AS (
         SELECT 
           e.electionid,
-          COUNT(DISTINCT v.voteid) as total_votes,
+          (SELECT COUNT(DISTINCT userid) FROM voters vt WHERE vt.electionid = e.electionid AND vt.has_voted = true) as total_votes,
           COUNT(DISTINCT c.candidateid) as candidate_count
         FROM elections e
         LEFT JOIN candidates c ON e.electionid = c.electionid
-        LEFT JOIN votes v ON c.candidateid = v.candidateid
         WHERE e.isactive = true
         GROUP BY e.electionid
       )
