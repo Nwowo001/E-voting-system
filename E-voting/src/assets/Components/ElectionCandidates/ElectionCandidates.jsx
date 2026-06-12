@@ -30,12 +30,25 @@ const ElectionCandidates = () => {
     }
   }, [user, navigate]);
   const [candidates, setCandidates] = useState([]);
-  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [selectedCandidates, setSelectedCandidates] = useState({});
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  const toggleSelectCandidate = (candidate) => {
+    const pos = candidate.position || "General";
+    setSelectedCandidates((prev) => {
+      const next = { ...prev };
+      if (next[pos] === candidate.candidateid) {
+        delete next[pos];
+      } else {
+        next[pos] = candidate.candidateid;
+      }
+      return next;
+    });
+  };
 
   // Voting Verification OTP states
   const [verificationStep, setVerificationStep] = useState("confirm"); // 'confirm' or 'otp'
@@ -111,7 +124,8 @@ const ElectionCandidates = () => {
 
   const handleVote = async (e) => {
     if (e) e.preventDefault();
-    if (!selectedCandidate) return;
+    const candidateIdsArray = Object.values(selectedCandidates);
+    if (candidateIdsArray.length === 0) return;
     if (!otpCode || otpCode.length < 6) {
       setError("Please enter a valid 6-digit verification code.");
       return;
@@ -123,7 +137,7 @@ const ElectionCandidates = () => {
       await axios.post(
         `${API_URL}/voters/votes`,
         {
-          candidateid: selectedCandidate,
+          candidateids: candidateIdsArray,
           electionid: parseInt(electionId),
           otp: otpCode,
         },
@@ -134,7 +148,7 @@ const ElectionCandidates = () => {
       );
       socket.emit("vote_cast", {
         electionId: parseInt(electionId),
-        candidateId: selectedCandidate,
+        candidateIds: candidateIdsArray,
       });
       setSuccessMessage("Your vote has been cast successfully! 🎉");
     } catch (err) {
@@ -178,10 +192,6 @@ const ElectionCandidates = () => {
       });
   };
 
-  const selectedInfo = candidates.find(
-    (c) => c.candidateid === selectedCandidate,
-  );
-
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
@@ -218,9 +228,19 @@ const ElectionCandidates = () => {
               <span className="text-text-muted">Election ID:</span>
               <span className="font-mono text-text">#{electionId}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-text-muted">Candidate Voted:</span>
-              <span className="text-text font-bold">{selectedInfo?.name}</span>
+            <div className="space-y-1.5 border-t border-b border-border/30 py-2.5 my-1 text-left">
+              <span className="text-indigo-400 font-bold uppercase tracking-wider text-[9px]">
+                Candidates Voted:
+              </span>
+              {Object.entries(selectedCandidates).map(([pos, cid]) => {
+                const cand = candidates.find((c) => c.candidateid === cid);
+                return (
+                  <div key={pos} className="flex justify-between text-[11px] font-medium">
+                    <span className="text-text-muted">{pos}:</span>
+                    <span className="text-text font-bold">{cand?.name}</span>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex justify-between">
@@ -308,142 +328,150 @@ const ElectionCandidates = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-24">
-            {candidates.map((candidate, index) => (
-              <button
-                key={candidate.candidateid}
-                onClick={() =>
-                  setSelectedCandidate(
-                    selectedCandidate === candidate.candidateid
-                      ? null
-                      : candidate.candidateid,
-                  )
-                }
-                className={`relative group text-left rounded-2xl border transition-all duration-200 overflow-hidden cursor-pointer ${
-                  selectedCandidate === candidate.candidateid
-                    ? "border-indigo-500 bg-indigo-600/15 shadow-lg shadow-indigo-500/20 scale-[1.02]"
-                    : "border-border/50 bg-surface/20 hover:border-border hover:bg-surface/35"
-                }`}
-              >
-                {/* Selected checkmark */}
-                {selectedCandidate === candidate.candidateid && (
-                  <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center z-10 shadow-lg">
-                    <FaCheck className="text-white text-xs" />
-                  </div>
-                )}
+          <div className="space-y-10 mb-28">
+            {Object.entries(
+              candidates.reduce((acc, candidate) => {
+                const pos = candidate.position || "General";
+                if (!acc[pos]) acc[pos] = [];
+                acc[pos].push(candidate);
+                return acc;
+              }, {})
+            ).map(([position, posCandidates]) => (
+              <div key={position} className="space-y-4">
+                <h2 className="text-base font-bold text-indigo-400 border-b border-border/30 pb-2 flex items-center gap-2">
+                  🎯 {position}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {posCandidates.map((candidate, index) => {
+                    const isSelected = selectedCandidates[candidate.position || "General"] === candidate.candidateid;
+                    return (
+                      <button
+                        key={candidate.candidateid}
+                        onClick={() => toggleSelectCandidate(candidate)}
+                        className={`relative group text-left rounded-2xl border transition-all duration-200 overflow-hidden cursor-pointer ${
+                          isSelected
+                            ? "border-indigo-500 bg-indigo-600/15 shadow-lg shadow-indigo-500/20 scale-[1.02]"
+                            : "border-border/50 bg-surface/20 hover:border-border hover:bg-surface/35"
+                        }`}
+                      >
+                        {/* Selected checkmark */}
+                        {isSelected && (
+                          <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center z-10 shadow-lg">
+                            <FaCheck className="text-white text-xs" />
+                          </div>
+                        )}
 
-                {/* Candidate number badge */}
-                <div className="absolute top-3 left-3 z-10">
-                  <span className="px-2 py-0.5 rounded-lg bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold">
-                    #{index + 1}
-                  </span>
+                        {/* Candidate number badge */}
+                        <div className="absolute top-3 left-3 z-10">
+                          <span className="px-2 py-0.5 rounded-lg bg-black/40 backdrop-blur-sm text-white text-[10px] font-bold">
+                            #{index + 1}
+                          </span>
+                        </div>
+
+                        {/* Candidate image */}
+                        <div className="aspect-[4/3] bg-gradient-to-br from-indigo-500/20 to-violet-500/20 relative overflow-hidden">
+                          <img
+                            src={
+                              candidate.image_url?.startsWith("http")
+                                ? candidate.image_url
+                                : `${BACKEND_URL}${candidate.image_url?.startsWith("/") ? "" : "/"}${candidate.image_url}`
+                            }
+                            alt={candidate.name}
+                            loading="lazy"
+                            className="w-full h-full object-cover transition-opacity duration-500"
+                            style={{ opacity: 0 }}
+                            onLoad={(e) => {
+                              e.target.style.opacity = 1;
+                              const spinner =
+                                e.target.parentNode.querySelector(".image-spinner");
+                              if (spinner) spinner.style.display = "none";
+                            }}
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                              const spinner =
+                                e.target.parentNode.querySelector(".image-spinner");
+                              if (spinner) spinner.style.display = "none";
+                              const fallback =
+                                e.target.parentNode.querySelector(".fallback-avatar");
+                              if (fallback) fallback.style.display = "flex";
+                            }}
+                          />
+                          <div className="image-spinner absolute inset-0 flex items-center justify-center bg-surface/20">
+                            <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                          <div className="fallback-avatar hidden absolute inset-0 items-center justify-center text-6xl bg-gradient-to-br from-indigo-500/10 to-violet-500/10">
+                            👤
+                          </div>
+
+                          {/* Party banner overlay at bottom of image */}
+                          {candidate.party && (
+                             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2">
+                               <span className="text-white text-xs font-bold truncate block">
+                                 🏛️ {candidate.party}
+                               </span>
+                             </div>
+                          )}
+                        </div>
+
+                        {/* Candidate info */}
+                        <div className="p-4 space-y-2">
+                          <h3 className="text-text font-bold text-sm leading-tight truncate">
+                            {candidate.name}
+                          </h3>
+
+                          {candidate.party && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-[10px] font-semibold truncate max-w-full">
+                                {candidate.party}
+                              </span>
+                            </div>
+                          )}
+
+                          {(candidate.biography || candidate.manifesto) && (
+                            <p className="text-text-muted text-[11px] leading-relaxed line-clamp-2 pt-0.5 border-t border-border/40">
+                              {candidate.biography || candidate.manifesto}
+                            </p>
+                          )}
+
+                          {/* Vote indicator */}
+                          <div
+                            className={`mt-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                              isSelected
+                                ? "text-indigo-400"
+                                : "text-text-muted/50"
+                            }`}
+                          >
+                            {isSelected
+                              ? "✓ Selected"
+                              : "Tap to select"}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-
-                {/* Candidate image */}
-                <div className="aspect-[4/3] bg-gradient-to-br from-indigo-500/20 to-violet-500/20 relative overflow-hidden">
-                  <img
-                    src={
-                      candidate.image_url?.startsWith("http")
-                        ? candidate.image_url
-                        : `${BACKEND_URL}${candidate.image_url?.startsWith("/") ? "" : "/"}${candidate.image_url}`
-                    }
-                    alt={candidate.name}
-                    loading="lazy"
-                    className="w-full h-full object-cover transition-opacity duration-500"
-                    style={{ opacity: 0 }}
-                    onLoad={(e) => {
-                      e.target.style.opacity = 1;
-                      const spinner =
-                        e.target.parentNode.querySelector(".image-spinner");
-                      if (spinner) spinner.style.display = "none";
-                    }}
-                    onError={(e) => {
-                      e.target.style.display = "none";
-                      const spinner =
-                        e.target.parentNode.querySelector(".image-spinner");
-                      if (spinner) spinner.style.display = "none";
-                      const fallback =
-                        e.target.parentNode.querySelector(".fallback-avatar");
-                      if (fallback) fallback.style.display = "flex";
-                    }}
-                  />
-                  <div className="image-spinner absolute inset-0 flex items-center justify-center bg-surface/20">
-                    <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                  <div className="fallback-avatar hidden absolute inset-0 items-center justify-center text-6xl bg-gradient-to-br from-indigo-500/10 to-violet-500/10">
-                    👤
-                  </div>
-
-                  {/* Party banner overlay at bottom of image */}
-                  {candidate.party && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2">
-                      <span className="text-white text-xs font-bold truncate block">
-                        🏛️ {candidate.party}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Candidate info */}
-                <div className="p-4 space-y-2">
-                  <h3 className="text-text font-bold text-base leading-tight">
-                    {candidate.name}
-                  </h3>
-
-                  {candidate.party && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-[11px] font-semibold truncate max-w-full">
-                        {candidate.party}
-                      </span>
-                    </div>
-                  )}
-
-                  {candidate.position && (
-                    <p className="text-text-muted text-xs font-medium flex items-center gap-1">
-                      🎯 <span className="truncate">{candidate.position}</span>
-                    </p>
-                  )}
-
-                  {(candidate.biography || candidate.manifesto) && (
-                    <p className="text-text-muted text-xs leading-relaxed line-clamp-2 pt-0.5 border-t border-border/40">
-                      {candidate.biography || candidate.manifesto}
-                    </p>
-                  )}
-
-                  {/* Vote indicator */}
-                  <div
-                    className={`mt-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                      selectedCandidate === candidate.candidateid
-                        ? "text-indigo-400"
-                        : "text-text-muted/50"
-                    }`}
-                  >
-                    {selectedCandidate === candidate.candidateid
-                      ? "✓ Selected"
-                      : "Tap to select"}
-                  </div>
-                </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
 
         {/* Confirmation panel */}
-        {selectedCandidate && !confirming && (
+        {Object.keys(selectedCandidates).length > 0 && !confirming && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-20 animate-slide-in">
             <div className="bg-surface/95 backdrop-blur-xl border border-indigo-500/35 rounded-2xl p-4 shadow-2xl shadow-indigo-500/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-                  <FaVoteYea />
-                </div>
-                <div className="overflow-hidden">
-                  <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider">
-                    Selected candidate
-                  </p>
-                  <p className="text-text font-bold text-sm truncate">
-                    {selectedInfo?.name}
-                  </p>
-                </div>
+              <div className="space-y-1.5 mb-3 max-h-36 overflow-y-auto pr-1 text-left">
+                <p className="text-text-muted text-[10px] uppercase font-bold tracking-wider mb-1 border-b border-border/20 pb-1">
+                  Your Selected Ballot
+                </p>
+                {Object.entries(selectedCandidates).map(([pos, cid]) => {
+                  const candObj = candidates.find((c) => c.candidateid === cid);
+                  return (
+                    <div key={pos} className="flex justify-between items-center text-xs py-0.5">
+                      <span className="text-text-muted font-medium">{pos}:</span>
+                      <span className="text-text font-bold truncate max-w-[200px]">{candObj?.name}</span>
+                    </div>
+                  );
+                })}
               </div>
               <button
                 onClick={() => {
@@ -452,7 +480,7 @@ const ElectionCandidates = () => {
                 }}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/25 cursor-pointer"
               >
-                Confirm My Vote
+                Confirm My Vote ({Object.keys(selectedCandidates).length} selected)
               </button>
             </div>
           </div>
@@ -464,23 +492,30 @@ const ElectionCandidates = () => {
             <div className="bg-surface border border-border rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl animate-scale-up">
               {verificationStep === "confirm" ? (
                 <>
-                  <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center mx-auto mb-5">
-                    <FaVoteYea className="text-amber-400 text-2xl" />
+                  <div className="w-14 h-14 rounded-full bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center mx-auto mb-4">
+                    <FaVoteYea className="text-amber-400 text-xl" />
                   </div>
-                  <h3 className="text-xl font-bold text-text mb-2">
-                    Confirm Your Vote
+                  <h3 className="text-lg font-bold text-text mb-2">
+                    Confirm Your Ballot
                   </h3>
-                  <p className="text-text-muted text-xs mb-1">
-                    You are voting for
-                  </p>
-                  <p className="text-text font-bold text-lg mb-1">
-                    {selectedInfo?.name}
-                  </p>
+                  
+                  <div className="space-y-1.5 mb-4 max-h-36 overflow-y-auto text-left bg-surface-2/40 p-3 border border-border/50 rounded-xl">
+                    <p className="text-text-muted text-[9px] uppercase font-bold tracking-wider mb-1 border-b border-border/30 pb-0.5">
+                      Ballot selections
+                    </p>
+                    {Object.entries(selectedCandidates).map(([pos, cid]) => {
+                      const candObj = candidates.find((c) => c.candidateid === cid);
+                      return (
+                        <div key={pos} className="flex justify-between items-center text-xs">
+                          <span className="text-text-muted">{pos}:</span>
+                          <span className="text-text font-bold truncate max-w-[150px]">{candObj?.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                  <div className="mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs leading-relaxed text-left">
-                    ⚠️ To prevent duplicate voting and vote farming, a 6-digit
-                    verification code will be sent to your registered email to
-                    validate your ballot.
+                  <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] leading-relaxed text-left">
+                    ⚠️ To prevent duplicate voting, a 6-digit verification code will be sent to your email to validate your ballot.
                   </div>
 
                   <div className="flex gap-3">

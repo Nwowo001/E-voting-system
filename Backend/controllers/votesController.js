@@ -83,12 +83,25 @@ export const recordVote = async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { candidateid, electionid, otp } = req.body;
+    const { candidateid, candidateids, electionid, otp } = req.body;
     const voterid = req.user.id;
 
     if (!otp) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Verification code is required.' });
+    }
+
+    // Normalize candidateids to an array
+    let candidateIdList = [];
+    if (Array.isArray(candidateids)) {
+      candidateIdList = candidateids.map(id => parseInt(id)).filter(Boolean);
+    } else if (candidateid) {
+      candidateIdList = [parseInt(candidateid)];
+    }
+
+    if (candidateIdList.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Candidate selection is required.' });
     }
 
     // Get user email and role
@@ -147,6 +160,25 @@ export const recordVote = async (req, res) => {
       return res.status(400).json({ error: 'Already voted in this election' });
     }
 
+    // Verify candidates exist in this election
+    const candidatesQuery = await client.query(
+      'SELECT candidateid, position FROM candidates WHERE candidateid = ANY($1::int[]) AND electionid = $2',
+      [candidateIdList, electionid]
+    );
+
+    if (candidatesQuery.rows.length !== candidateIdList.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'One or more selected candidates are invalid for this election.' });
+    }
+
+    // Verify unique position constraint (only one candidate per position)
+    const positions = candidatesQuery.rows.map(r => r.position || '');
+    const uniquePositions = new Set(positions);
+    if (uniquePositions.size !== positions.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'You can only vote for one candidate per position.' });
+    }
+
     // Mark voter as having voted (for anonymity tracking)
     await client.query(
       `INSERT INTO voters (userid, electionid, has_voted)
@@ -154,24 +186,25 @@ export const recordVote = async (req, res) => {
       [voterid, electionid]
     );
 
-    // Record the vote anonymously (without voterid for ballot secrecy)
-    const result = await client.query(
-      `INSERT INTO votes (candidateid, electionid, votetimestamp)
-       VALUES ($1, $2, NOW())
-       RETURNING voteid`,
-      [candidateid, electionid]
-    );
+    // Record the votes anonymously (without voterid for ballot secrecy) and update counts
+    for (const cid of candidateIdList) {
+      await client.query(
+        `INSERT INTO votes (candidateid, electionid, votetimestamp)
+         VALUES ($1, $2, NOW())`,
+        [cid, electionid]
+      );
 
-    // Update votecounts table
-    await client.query(
-      'UPDATE votecounts SET votecount = votecount + 1 WHERE candidateid = $1',
-      [candidateid]
-    );
-    // Also update candidates table vote_count
-    await client.query(
-      'UPDATE candidates SET vote_count = vote_count + 1 WHERE candidateid = $1',
-      [candidateid]
-    );
+      // Update votecounts table
+      await client.query(
+        'UPDATE votecounts SET votecount = votecount + 1 WHERE candidateid = $1',
+        [cid]
+      );
+      // Also update candidates table vote_count
+      await client.query(
+        'UPDATE candidates SET vote_count = vote_count + 1 WHERE candidateid = $1',
+        [cid]
+      );
+    }
 
     // Delete OTP
     await client.query('DELETE FROM otps WHERE email = $1 AND type = \'vote\'', [email]);
@@ -180,13 +213,13 @@ export const recordVote = async (req, res) => {
 
     // Emit real-time update
     if (req.io) {
-      req.io.emit('vote_recorded', { electionid, candidateid });
+      req.io.emit('vote_recorded', { electionid, candidateids: candidateIdList });
     }
 
     return res.status(201).json({
       success: true,
       message: 'Vote recorded successfully',
-      data: result.rows[0],
+      data: { success: true },
     });
   } catch (error) {
     await client.query('ROLLBACK');
